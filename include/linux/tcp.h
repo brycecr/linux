@@ -455,6 +455,15 @@ struct tcp_sock {
 	struct tcp_md5sig_info	*md5sig_info;
 #endif
 
+/* DCTCP Specific Parameters */
+ 	u32	acked_bytes_ecn;
+ 	u32	acked_bytes_total;
+ 	u32	prior_rcv_nxt;
+ 	u32	dctcp_alpha;
+ 	u32	next_seq;
+ 	u32	ce_state;	/* 0: last pkt was non-ce , 1: last pkt was ce */
+ 	u32	delayed_ack_reserved;
+
 	/* When the cookie options are generated and exchanged, then this
 	 * object holds a reference to them (cookie_values->kref).  Also
 	 * contains related tcp_cookie_transactions fields.

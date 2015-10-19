@@ -467,6 +467,11 @@ struct sock *tcp_create_openreq_child(struct sock *sk, struct request_sock *req,
 		newtp->snd_nxt = newtp->snd_up =
 			treq->snt_isn + 1 + tcp_s_data_size(oldtp);
 
+		/* Initialize DCTCP internal parameters */
+		newtp->next_seq = newtp->snd_nxt; 
+		newtp->acked_bytes_ecn = 0;
+		newtp->acked_bytes_total = 0;
+
 		tcp_prequeue_init(newtp);
 
 		tcp_init_wl(newtp, treq->rcv_isn);

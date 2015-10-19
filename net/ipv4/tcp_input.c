@@ -98,6 +98,13 @@ int sysctl_tcp_thin_dupack __read_mostly;
 int sysctl_tcp_moderate_rcvbuf __read_mostly = 1;
 int sysctl_tcp_abc __read_mostly;
 
+int sysctl_tcp_delayed_ack __read_mostly = 1;
+EXPORT_SYMBOL(sysctl_tcp_delayed_ack);
+int sysctl_tcp_dctcp_enable __read_mostly;
+EXPORT_SYMBOL(sysctl_tcp_dctcp_enable);
+int sysctl_tcp_dctcp_shift_g  __read_mostly = 4; /* g=1/2^4 */
+EXPORT_SYMBOL(sysctl_tcp_dctcp_shift_g);
+
 #define FLAG_DATA		0x01 /* Incoming frame contained data.		*/
 #define FLAG_WIN_UPDATE		0x02 /* Incoming ACK was a window update.	*/
 #define FLAG_DATA_ACKED		0x04 /* This ACK acknowledged new data.		*/
@@ -217,16 +224,70 @@ static inline void TCP_ECN_withdraw_cwr(struct tcp_sock *tp)
 	tp->ecn_flags &= ~TCP_ECN_DEMAND_CWR;
 }
 
-static inline void TCP_ECN_check_ce(struct tcp_sock *tp, struct sk_buff *skb)
+static inline void TCP_ECN_dctcp_check_ce(struct sock *sk, struct tcp_sock *tp, struct sk_buff *skb)
 {
 	if (tp->ecn_flags & TCP_ECN_OK) {
-		if (INET_ECN_is_ce(TCP_SKB_CB(skb)->flags))
-			tp->ecn_flags |= TCP_ECN_DEMAND_CWR;
-		/* Funny extension: if ECT is not set on a segment,
-		 * it is surely retransmit. It is not in ECN RFC,
-		 * but Linux follows this rule. */
-		else if (INET_ECN_is_not_ect((TCP_SKB_CB(skb)->flags)))
-			tcp_enter_quickack_mode((struct sock *)tp);
+	  u32 temp_rcv_nxt;
+
+	  if (INET_ECN_is_ce(TCP_SKB_CB(skb)->flags)) {
+
+	    /* rcv_nxt is already update in previous process (tcp_rcv_established) */
+
+	    if(sysctl_tcp_dctcp_enable) {
+
+	      /* state has changed from CE=0 to CE=1 && delayed ack has not sent yet */
+	      if(tp->ce_state == 0 && tp->delayed_ack_reserved) {
+
+		/* save current rcv_nxt */
+		temp_rcv_nxt = tp->rcv_nxt;
+		/* generate previous ack with CE=0 */
+		tp->ecn_flags &= ~TCP_ECN_DEMAND_CWR;
+		tp->rcv_nxt = tp->prior_rcv_nxt;
+		/* printk("CE=0 rcv_nxt= %u nxt= %u\n",tp->rcv_nxt, temp_rcv_nxt);  */
+		tcp_send_ack(sk);
+		/* recover current rcv_nxt */
+		tp->rcv_nxt = temp_rcv_nxt;
+	      }
+	      
+	      tp->ce_state = 1;
+	    }
+
+	    tp->ecn_flags |= TCP_ECN_DEMAND_CWR;
+
+
+	    /* Funny extension: if ECT is not set on a segment,
+	     * it is surely retransmit. It is not in ECN RFC,
+	     * but Linux follows this rule. */
+	  } else if (INET_ECN_is_not_ect((TCP_SKB_CB(skb)->flags))) {
+	    tcp_enter_quickack_mode((struct sock *)tp);
+	  }else {
+	    /* It has ECT but it doesn't have CE */
+	    
+	    if(sysctl_tcp_dctcp_enable) {
+	      
+	      if(tp->ce_state != 0 && tp->delayed_ack_reserved) {
+		
+		/* save current rcv_nxt */
+		temp_rcv_nxt = tp->rcv_nxt;
+		/* generate previous ack with CE=1 */
+		tp->ecn_flags |= TCP_ECN_DEMAND_CWR;
+		tp->rcv_nxt = tp->prior_rcv_nxt;
+		/* printk("CE=1 rcv_nxt= %u nxt= %u\n",tp->rcv_nxt, temp_rcv_nxt);  */
+		tcp_send_ack(sk);
+		/* recover current rcv_nxt */
+		tp->rcv_nxt = temp_rcv_nxt;
+	      }
+
+	      tp->ce_state = 0;
+
+	      /* deassert only when DCTCP is enabled */
+	      tp->ecn_flags &= ~TCP_ECN_DEMAND_CWR;
+	    }
+
+	  }
+	    
+	  /* set current rcv_nxt to prior_rcv_nxt */
+	  tp->prior_rcv_nxt = tp->rcv_nxt;
 	}
 }
 
@@ -581,6 +642,8 @@ static void tcp_event_data_recv(struct sock *sk, struct sk_buff *skb)
 		 */
 		tcp_incr_quickack(sk);
 		icsk->icsk_ack.ato = TCP_ATO_MIN;
+
+		tp->ce_state = 0;
 	} else {
 		int m = now - icsk->icsk_ack.lrcvtime;
 
@@ -601,7 +664,7 @@ static void tcp_event_data_recv(struct sock *sk, struct sk_buff *skb)
 	}
 	icsk->icsk_ack.lrcvtime = now;
 
-	TCP_ECN_check_ce(tp, skb);
+	TCP_ECN_dctcp_check_ce(sk, tp, skb);
 
 	if (skb->len >= 128)
 		tcp_grow_window(sk, skb);
@@ -827,19 +890,54 @@ void tcp_enter_cwr(struct sock *sk, const int set_ssthresh)
 	struct tcp_sock *tp = tcp_sk(sk);
 	const struct inet_connection_sock *icsk = inet_csk(sk);
 
+	__u32 ssthresh_old; 
+	__u32 cwnd_old;
+	__u32 cwnd_new;
+
 	tp->prior_ssthresh = 0;
 	tp->bytes_acked = 0;
 	if (icsk->icsk_ca_state < TCP_CA_CWR) {
 		tp->undo_marker = 0;
-		if (set_ssthresh)
-			tp->snd_ssthresh = icsk->icsk_ca_ops->ssthresh(sk);
-		tp->snd_cwnd = min(tp->snd_cwnd,
-				   tcp_packets_in_flight(tp) + 1U);
+
+		if(!sysctl_tcp_dctcp_enable) {
+
+		  if (set_ssthresh)
+		    tp->snd_ssthresh = icsk->icsk_ca_ops->ssthresh(sk);
+
+		  tp->snd_cwnd = min(tp->snd_cwnd,
+				     tcp_packets_in_flight(tp) + 1U);
+		  
+		}else {
+
+		  cwnd_new = max (tp->snd_cwnd - ((tp->snd_cwnd * tp->dctcp_alpha)>>11) , 2U);
+
+		  if(set_ssthresh) {
+		    
+		    ssthresh_old = tp->snd_ssthresh;
+		    tp->snd_ssthresh =  cwnd_new;
+		    
+		    /* printk("%llu alpha= %d ssth old= %d new= %d\n", */
+		    /* 		    			   ktime_to_us(ktime_get_real()), */
+		    /* 		    			   tp->dctcp_alpha, */
+		    /* 		    			   ssthresh_old, */
+		    /* 		    			   tp->snd_ssthresh); */
+		  }
+		  
+		  cwnd_old = tp->snd_cwnd;
+		  tp->snd_cwnd = cwnd_new;
+		  
+		  /* printk("%llu alpha= %d cwnd old= %d new= %d\n", */
+		  /* 		  			 ktime_to_us(ktime_get_real()), */
+		  /* 		  			 tp->dctcp_alpha, */
+		  /* 		  			 cwnd_old, */
+		  /* 		  			 tp->snd_cwnd); */
+		}
+		
 		tp->snd_cwnd_cnt = 0;
 		tp->high_seq = tp->snd_nxt;
 		tp->snd_cwnd_stamp = tcp_time_stamp;
 		TCP_ECN_queue_cwr(tp);
-
+		
 		tcp_set_ca_state(sk, TCP_CA_CWR);
 	}
 }
@@ -2857,6 +2955,7 @@ static void tcp_try_to_open(struct sock *sk, int flag)
 		tcp_try_keep_open(sk);
 		tcp_moderate_cwnd(tp);
 	} else {
+	  if(!sysctl_tcp_dctcp_enable)
 		tcp_cwnd_down(sk, flag);
 	}
 }
@@ -3622,6 +3721,9 @@ static int tcp_ack(struct sock *sk, struct sk_buff *skb, int flag)
 	int prior_packets;
 	int frto_cwnd = 0;
 
+	__u32 alpha_old;
+	__u32 acked_bytes;
+
 	/* If the ack is older than previous acks
 	 * then we can probably ignore it.
 	 */
@@ -3677,6 +3779,52 @@ static int tcp_ack(struct sock *sk, struct sk_buff *skb, int flag)
 
 		tcp_ca_event(sk, CA_EVENT_SLOW_ACK);
 	}
+
+	/* START: DCTCP Processing */
+
+	/* calc acked bytes */
+	if(after(ack, prior_snd_una)) {
+	  acked_bytes = ack - prior_snd_una;
+	} else {
+	  
+	  if(flag & FLAG_WIN_UPDATE) {
+	    /* Don't count when it is Window Updated ACK */
+	    acked_bytes = 0; 
+	    /* printk("acked_byte=0\n"); */
+	  }else {
+	    /* Count duplicate ACKs for Retransmission packets and so on as MSS size */
+	    acked_bytes = inet_csk(sk)->icsk_ack.rcv_mss;
+	  }
+	}
+
+	if(flag & FLAG_ECE) 
+	  tp->acked_bytes_ecn += acked_bytes;
+
+	tp->acked_bytes_total += acked_bytes;
+
+	/* Expired RTT */
+        if (!before(tp->snd_una,tp->next_seq)) {
+
+	  /* For avoiding denominator == 1 */
+	  if(tp->acked_bytes_total == 0) tp->acked_bytes_total = 1;
+
+          alpha_old = tp->dctcp_alpha; 
+
+	  /* alpha = (1-g) * alpha + g * F */
+	  tp->dctcp_alpha = alpha_old - (alpha_old >> sysctl_tcp_dctcp_shift_g)
+	    + (tp->acked_bytes_ecn << (10 - sysctl_tcp_dctcp_shift_g)) / tp->acked_bytes_total;  
+	  
+	  if(tp->dctcp_alpha > 1024) tp->dctcp_alpha = 1024; /* round to 0-1024 */
+
+          /* printk("bytes_ecn= %d total= %d alpha: old= %d new= %d\n", */
+	  /* 	  		 tp->acked_bytes_ecn, tp->acked_bytes_total, alpha_old, tp->dctcp_alpha); */
+	  
+	  tp->acked_bytes_ecn = 0;
+	  tp->acked_bytes_total = 0;
+	  tp->next_seq = tp->snd_nxt;
+        }
+
+	/* END: DCTCP Processing */
 
 	/* We passed data and got it acked, remove any soft error
 	 * log. Something worked...
@@ -4478,7 +4626,7 @@ drop:
 		goto queue_and_out;
 	}
 
-	TCP_ECN_check_ce(tp, skb);
+	TCP_ECN_dctcp_check_ce(sk, tp, skb);
 
 	if (tcp_try_rmem_schedule(sk, skb->truesize))
 		goto drop;
@@ -4929,6 +5077,8 @@ static void __tcp_ack_snd_check(struct sock *sk, int ofo_possible)
 	     __tcp_select_window(sk) >= tp->rcv_wnd) ||
 	    /* We ACK each frame or... */
 	    tcp_in_quickack_mode(sk) ||
+	    /* Delayed ACK is disabled or ... */
+	    sysctl_tcp_delayed_ack == 0 ||
 	    /* We have out of order data. */
 	    (ofo_possible && skb_peek(&tp->out_of_order_queue))) {
 		/* Then ack it now */

@@ -308,7 +308,7 @@ static inline void TCP_ECN_send_syn(struct sock *sk, struct sk_buff *skb)
 	struct tcp_sock *tp = tcp_sk(sk);
 
 	tp->ecn_flags = 0;
-	if (sysctl_tcp_ecn == 1) {
+	if (sysctl_tcp_ecn == 1 || sysctl_tcp_dctcp_enable) {
 		TCP_SKB_CB(skb)->flags |= TCPHDR_ECE | TCPHDR_CWR;
 		tp->ecn_flags = TCP_ECN_OK;
 	}
@@ -877,6 +877,10 @@ static int tcp_transmit_skb(struct sock *sk, struct sk_buff *skb, int clone_it,
 	tcp_options_write((__be32 *)(th + 1), tp, &opts);
 	if (likely((tcb->flags & TCPHDR_SYN) == 0))
 		TCP_ECN_send(sk, skb, tcp_header_size);
+
+	/* In DCTCP, Assert ECT bit to all packets*/
+	if(sysctl_tcp_dctcp_enable)
+		INET_ECN_xmit(sk);
 
 #ifdef CONFIG_TCP_MD5SIG
 	/* Calculate the MD5 hash, as we have all we need now */
@@ -2623,6 +2627,11 @@ int tcp_connect(struct sock *sk)
 	tcp_init_nondata_skb(buff, tp->write_seq++, TCPHDR_SYN);
 	TCP_ECN_send_syn(sk, buff);
 
+	/* Initialize DCTCP internal parameters */
+	tp->next_seq = tp->snd_nxt; 
+	tp->acked_bytes_ecn = 0;
+	tp->acked_bytes_total = 0;
+
 	/* Send it off. */
 	TCP_SKB_CB(buff)->when = tcp_time_stamp;
 	tp->retrans_stamp = TCP_SKB_CB(buff)->when;
@@ -2658,6 +2667,10 @@ void tcp_send_delayed_ack(struct sock *sk)
 	struct inet_connection_sock *icsk = inet_csk(sk);
 	int ato = icsk->icsk_ack.ato;
 	unsigned long timeout;
+
+	/* Delayed ACK reserved flag for DCTCP */
+	struct tcp_sock *tp = tcp_sk(sk);
+	tp->delayed_ack_reserved = 1;
 
 	if (ato > TCP_DELACK_MIN) {
 		const struct tcp_sock *tp = tcp_sk(sk);
@@ -2709,6 +2722,10 @@ void tcp_send_delayed_ack(struct sock *sk)
 void tcp_send_ack(struct sock *sk)
 {
 	struct sk_buff *buff;
+
+	/* Delayed ACK reserved flag for DCTCP */
+	struct tcp_sock *tp = tcp_sk(sk);
+	tp->delayed_ack_reserved = 0;
 
 	/* If we have been reset, we may not send again. */
 	if (sk->sk_state == TCP_CLOSE)
