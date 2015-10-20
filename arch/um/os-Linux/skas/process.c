@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <sched.h>
 #include <errno.h>
+#include <signal.h>
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/ptrace.h>

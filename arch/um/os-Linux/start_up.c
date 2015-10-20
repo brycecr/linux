@@ -13,6 +13,8 @@
 #include <signal.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <sys/resource.h>
+#include <sys/time.h>
 #include <sys/ptrace.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
