@@ -1064,7 +1064,7 @@ static int tcp_sendmsg_fastopen(struct sock *sk, struct msghdr *msg,
 	return err;
 }
 
-int tcp_sendmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
+int tcp_sendmsg_internal(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
 		size_t size)
 {
 	const struct iovec *iov;
@@ -1299,6 +1299,12 @@ out_err:
 	err = sk_stream_error(sk, flags, err);
 	release_sock(sk);
 	return err;
+}
+
+int tcp_sendmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
+		size_t size)
+{
+	return tcp_sendmsg_internal(iocb, sk, msg, size);
 }
 EXPORT_SYMBOL(tcp_sendmsg);
 
@@ -1564,7 +1570,7 @@ EXPORT_SYMBOL(tcp_read_sock);
  *	Probably, code can be easily improved even more.
  */
 
-int tcp_recvmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
+int tcp_recvmsg_internal(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
 		size_t len, int nonblock, int flags, int *addr_len)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
@@ -1892,6 +1898,12 @@ recv_urg:
 recv_sndq:
 	err = tcp_peek_sndq(sk, msg, len);
 	goto out;
+}
+
+int tcp_recvmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
+		size_t len, int nonblock, int flags, int *addr_len)
+{
+	return tcp_recvmsg_internal(iocb, sk, msg, len, nonblock, flags, addr_len);
 }
 EXPORT_SYMBOL(tcp_recvmsg);
 
