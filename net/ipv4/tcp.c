@@ -1903,6 +1903,10 @@ recv_sndq:
 int tcp_recvmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
 		size_t len, int nonblock, int flags, int *addr_len)
 {
+	struct dctcp *ca = inet_csk_ca(sk); // this probably cannot be a dctcp struct, have to make another
+	if (ca->ce_state) {
+		tcp_
+	}
 	return tcp_recvmsg_internal(iocb, sk, msg, len, nonblock, flags, addr_len);
 }
 EXPORT_SYMBOL(tcp_recvmsg);
