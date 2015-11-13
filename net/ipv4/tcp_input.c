@@ -3397,12 +3397,18 @@ static inline void tcp_in_ack_event(struct sock *sk, u32 flags)
 		icsk->icsk_ca_ops->in_ack_event(sk, flags);
 }
 
+static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
+{
+	if (sk->dctcp_shell
+	return tcp_ack(sk, skb, flag);
+}
+
 /* This routine deals with incoming acks, but not outgoing ones. */
 static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 {
 	struct inet_connection_sock *icsk = inet_csk(sk);
 	struct tcp_sock *tp = tcp_sk(sk);
-	u32 prior_snd_una = tp->snd_una;
+	u32 prior_snd_una = tp->snd_una; // first byte we want ack for
 	u32 ack_seq = TCP_SKB_CB(skb)->seq;
 	u32 ack = TCP_SKB_CB(skb)->ack_seq;
 	bool is_dupack = false;
