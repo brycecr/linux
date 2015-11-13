@@ -437,6 +437,21 @@ struct sock {
 	int			(*sk_backlog_rcv)(struct sock *sk,
 						  struct sk_buff *skb);
 	void                    (*sk_destruct)(struct sock *sk);
+
+	/* this might be a terrible idea because sock is a basic
+	 * data structure so it is quite likely that assumptions are made
+	 * about its size or what is at the end of it...
+	 * in that likely case, here goes nothing */
+	struct {
+		u32 acked_bytes_ecn;
+		u32 acked_bytes_total;
+		u32 prior_snd_una;
+		u32 prior_rcv_nxt;
+		u32 dctcp_alpha;
+		u32 next_seq;
+		u32 ce_state;
+		u32 delayed_ack_reserved;
+	} vtcp_state;
 };
 
 #define __sk_user_data(sk) ((*((void __rcu **)&(sk)->sk_user_data)))

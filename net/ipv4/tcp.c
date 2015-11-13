@@ -1900,13 +1900,114 @@ recv_sndq:
 	goto out;
 }
 
+struct dctcp_shell {
+	u32 acked_bytes_ecn;
+	u32 acked_bytes_total;
+	u32 prior_snd_una;
+	u32 prior_rcv_nxt;
+	u32 dctcp_alpha;
+	u32 next_seq;
+	u32 ce_state;
+	u32 delayed_ack_reserved;
+};
+
 int tcp_recvmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
 		size_t len, int nonblock, int flags, int *addr_len)
 {
-	struct dctcp *ca = inet_csk_ca(sk); // this probably cannot be a dctcp struct, have to make another
-	if (ca->ce_state) {
-		tcp_
+	printk("intercepting recvmsg call\n");
+	struct sk_buff *skb;
+	u32 offset;
+	skb_queue_walk(&sk->sk_receive_queue, skb) {
+		offset = *seq - TCP_SKB_CB(skb)->seq;
+		if (offset < skb->len) {
+			if (TCP_SKB_CB(skb)->ip_dsfield & INET_ECN_MASK == INET_ECN_CE) {
+				// clearly cannot use dctcp struct here, need a different threaded struct
+				struct dctcp_shell *ca = inet_csk_ca(sk);
+				struct tcp_sock *tp = tcp_sk(sk);
+
+				// Handle delayed ack
+				/* State has changed from CE=0 to CE=1 and delayed
+                 * ACK has not sent yet.
+                 */
+				if (!ca->ce_state && ca->delayed_ack_reserved) {
+					u32 tmp_rcv_nxt;
+
+					/* Save current rcv_nxt. */
+					tmp_rcv_nxt = tp->rcv_nxt;
+
+					/* Generate previous ack with CE=0. */
+					tp->ecn_flags &= ~TCP_ECN_DEMAND_CWR;
+					tp->rcv_nxt = ca->prior_rcv_nxt;
+
+					tcp_send_ack(sk);
+
+					/* Recover current rcv_nxt. */
+					tp->rcv_nxt = tmp_rcv_nxt;
+				}
+				// set ECN based on alpha
+				ca->prior_recv_nxt = tp->rcv_nxt;
+				ca->ce_state = 1;
+				tp->ecn_flags |= TCP_ECN_DEMAND_CWR;
+			} else if (TCP_SKB_CB(skb)->ip_dsfield & INET_ECN_MASK != INET_ECN_NOT_ECT) {
+				// reset connection status
+
+				// obv. can't use struct dctcp here either
+				struct dctcp_shell *ca = inet_csk_ca(sk);
+				struct tcp_sock *tp = tcp_sk(sk);
+
+				/* State has changed from CE=1 to CE=0 and delayed
+                 * ACK has not sent yet.
+                 */
+				if (ca->ce_state && ca->delayed_ack_reserved) {
+					u32 tmp_rcv_nxt;
+
+					/* Save current rcv_nxt. */
+					tmp_rcv_nxt = tp->rcv_nxt;
+
+					/* Generate previous ack with CE=1. */
+					tp->ecn_flags |= TCP_ECN_DEMAND_CWR;
+					tp->rcv_nxt = ca->prior_rcv_nxt;
+
+					tcp_send_ack(sk);
+
+					/* Recover current rcv_nxt. */
+					tp->rcv_nxt = tmp_rcv_nxt;
+				}
+
+				ca->prior_rcv_nxt = tp->rcv_nxt;
+				ca->ce_state = 0;
+
+				tp->ecn_flags &= ~TCP_ECN_DEMAND_CWR;
+			}
+		}
 	}
+	// How are we going to do packet drops here?? I guess if we
+	// see ECN we reduce cwnd by alpha.
+	// Well of course. but this needs to be cwnd stored seperately from
+	// the normal tcp implementation.
+	// Note: in order to drop, checkout skb_kill_datagram
+	// I do not know why it insists on MSG_PEEK flag being set...maybe we
+	// can just ignore that and see what happens
+	if (0 /* drop skb */) {
+		// Note: Do we have the lock????????????
+		skb_kill_datagram(sk, skb, 0 & MSG_PEEK /* set MSG_PEEK ALWAYS ON */);
+//		spin_lock_bh(&sk->sk_receive_queue.lock);
+//		// if skb_peek (check that this skb is indeed on the sock
+//		__skb_unlink(skb, &sk->sk_receive_queue);
+//		atomic_dec(&skb->users);
+//		spin_unlock_bh(&sk->sk_receive_queue.lock);
+//		kfree_skb(skb);
+//		atomic_inc(&sk->sk_drops);
+//		sk_mem_reclaim_partial(sk);
+	}
+//	struct tcp_info info;
+//	tcp_get_info(sk, &info);
+//	if(info->tcpi_options & TCPI_OPT_ECN) {
+//		printk("TCPI_OPT_ECN is on!");
+//	}
+//	if(info->tcpi_options & TCPI_OPT_ECN_SEEN) {
+//		printk("TCPI_OPT_ECN_SEEN is on!");
+//	}
 	return tcp_recvmsg_internal(iocb, sk, msg, len, nonblock, flags, addr_len);
 }
 EXPORT_SYMBOL(tcp_recvmsg);
