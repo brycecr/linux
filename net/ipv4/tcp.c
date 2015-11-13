@@ -2586,6 +2586,8 @@ static int do_tcp_setsockopt(struct sock *sk, int level,
 		break;
 	}
 
+	vtcp_init(sk);
+
 	release_sock(sk);
 	return err;
 }

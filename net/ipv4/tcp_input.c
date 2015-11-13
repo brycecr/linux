@@ -3397,14 +3397,9 @@ static inline void tcp_in_ack_event(struct sock *sk, u32 flags)
 		icsk->icsk_ca_ops->in_ack_event(sk, flags);
 }
 
-static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
-{
-	if (sk->dctcp_shell
-	return tcp_ack(sk, skb, flag);
-}
 
 /* This routine deals with incoming acks, but not outgoing ones. */
-static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
+static int __tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 {
 	struct inet_connection_sock *icsk = inet_csk(sk);
 	struct tcp_sock *tp = tcp_sk(sk);
@@ -3564,6 +3559,76 @@ old_ack:
 
 	SOCK_DEBUG(sk, "Ack %u before %u:%u\n", ack, tp->snd_una, tp->snd_nxt);
 	return 0;
+}
+
+static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
+{
+
+	printk("VTCP SAYS %u", sk->vtcp_state.acked_bytes_ecn);
+// We can re-enable this stuff once we are confident that we are actually getting
+// some properties into the sock sk correctly!
+//	if (TCP_SKB_CB(skb)->ip_dsfield & INET_ECN_MASK == INET_ECN_CE) {
+//		// Turn on DCTCP ECN reaction mode for this socket
+//
+//		// clearly cannot use dctcp struct here, need a different threaded struct
+//		struct dctcp_shell *ca = inet_csk_ca(sk);
+//		struct tcp_sock *tp = tcp_sk(sk);
+//
+//		// Handle delayed ack
+//		/* State has changed from CE=0 to CE=1 and delayed
+//		 * ACK has not sent yet.
+//		 */
+//		if (!ca->ce_state && ca->delayed_ack_reserved) {
+//			u32 tmp_rcv_nxt;
+//
+//			/* Save current rcv_nxt. */
+//			tmp_rcv_nxt = tp->rcv_nxt;
+//
+//			/* Generate previous ack with CE=0. */
+//			tp->ecn_flags &= ~TCP_ECN_DEMAND_CWR;
+//			tp->rcv_nxt = ca->prior_rcv_nxt;
+//
+//			tcp_send_ack(sk);
+//
+//			/* Recover current rcv_nxt. */
+//			tp->rcv_nxt = tmp_rcv_nxt;
+//		}
+//		// set ECN based on alpha
+//		ca->prior_recv_nxt = tp->rcv_nxt;
+//		ca->ce_state = 1;
+//		tp->ecn_flags |= TCP_ECN_DEMAND_CWR;
+//	} else if (TCP_SKB_CB(skb)->ip_dsfield & INET_ECN_MASK != INET_ECN_NOT_ECT) {
+//		// reset connection status
+//
+//		// obv. can't use struct dctcp here either
+//		struct dctcp_shell *ca = inet_csk_ca(sk);
+//		struct tcp_sock *tp = tcp_sk(sk);
+//
+//		/* State has changed from CE=1 to CE=0 and delayed
+//		 * ACK has not sent yet.
+//		 */
+//		if (ca->ce_state && ca->delayed_ack_reserved) {
+//			u32 tmp_rcv_nxt;
+//
+//			/* Save current rcv_nxt. */
+//			tmp_rcv_nxt = tp->rcv_nxt;
+//
+//			/* Generate previous ack with CE=1. */
+//			tp->ecn_flags |= TCP_ECN_DEMAND_CWR;
+//			tp->rcv_nxt = ca->prior_rcv_nxt;
+//
+//			tcp_send_ack(sk);
+//
+//			/* Recover current rcv_nxt. */
+//			tp->rcv_nxt = tmp_rcv_nxt;
+//		}
+//
+//		ca->prior_rcv_nxt = tp->rcv_nxt;
+//		ca->ce_state = 0;
+//
+//		tp->ecn_flags &= ~TCP_ECN_DEMAND_CWR;
+//	}
+	return __tcp_ack(sk, skb, flag);
 }
 
 /* Look for tcp options. Normally only called on SYN and SYNACK packets.
