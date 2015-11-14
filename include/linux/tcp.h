@@ -381,6 +381,7 @@ static inline int fastopen_init_queue(struct sock *sk, int backlog)
 static inline int vtcp_init(struct sock *sk)
 {
 	sk->vtcp_state.acked_bytes_ecn = 42;
+	return 0;
 }
 
 #endif	/* _LINUX_TCP_H */

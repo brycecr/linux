@@ -422,6 +422,7 @@ void tcp_init_sock(struct sock *sk)
 	sock_update_memcg(sk);
 	sk_sockets_allocated_inc(sk);
 	local_bh_enable();
+	vtcp_init(sk);
 }
 EXPORT_SYMBOL(tcp_init_sock);
 
@@ -2586,7 +2587,6 @@ static int do_tcp_setsockopt(struct sock *sk, int level,
 		break;
 	}
 
-	vtcp_init(sk);
 
 	release_sock(sk);
 	return err;
