@@ -451,6 +451,8 @@ struct sock {
 		u32 next_seq;
 		u32 ce_state;
 		u32 delayed_ack_reserved;
+		u32 target_window;
+		u32 last_window;
 	} vtcp_state;
 };
 

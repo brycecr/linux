@@ -393,7 +393,7 @@ static inline int vtcp_init(struct sock *sk)
 	sk->vtcp_state.prior_snd_una = tp->snd_una;
 	sk->vtcp_state.prior_rcv_nxt = tp->rcv_nxt;
 
-	sk->vtcp_state.dctcp_alpha = min(dctcp_alpha_on_init, DCTCP_MAX_ALPHA);
+	sk->vtcp_state.dctcp_alpha = 1024U; // should be configurable...but isn't. Yet.
 
 	sk->vtcp_state.delayed_ack_reserved = 0;
 	sk->vtcp_state.ce_state = 0;

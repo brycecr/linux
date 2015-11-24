@@ -58,7 +58,7 @@ struct dctcp {
 	u32 delayed_ack_reserved;
 };
 
-static unsigned int dctcp_shift_g __read_mostly = 4; /* g = 1/2^4 */
+static unsigned int dctc_shift_g __read_mostly = 4; /* g = 1/2^4 */
 module_param(dctcp_shift_g, uint, 0644);
 MODULE_PARM_DESC(dctcp_shift_g, "parameter g for updating dctcp_alpha");
 
