@@ -3568,7 +3568,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 
 	struct tcp_sock *tp = tcp_sk(sk);
 	struct tcphdr *th = tcp_hdr(skb);
-	u32 acked_bytes = tp->snd_una - ca->prior_snd_una;
+	u32 acked_bytes = tp->snd_una - sk->vtcp_state.prior_snd_una;
 
 	/* Check if ECN is set on the incoming ACK header.
 	 * and start reducing cwnd if so.
@@ -3622,6 +3622,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 		sk->vtcp_state.acked_bytes_ecn += acked_bytes;
 	}
 
+	sk->vtcp_state.prior_snd_una = tp->snd_una;
 	sk->vtcp_state.acked_bytes_total += acked_bytes;
 
         /* Expired RTT */
