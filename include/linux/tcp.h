@@ -378,9 +378,31 @@ static inline int fastopen_init_queue(struct sock *sk, int backlog)
 	return 0;
 }
 
+/**
+ * Initialize tcp parameters for this socket
+ */
 static inline int vtcp_init(struct sock *sk)
 {
-	sk->vtcp_state.acked_bytes_ecn = 42;
+	/*
+	 * if ((tp->ecn_flags & TCP_ECN_OK) ||
+	 *   (sk->sk_state == TCP_LISTEN ||
+	 *    sk->sk_state == TCP_CLOSE)) {
+	 */
+	const struct tcp_sock *tp = tcp_sk(sk);
+
+	sk->vtcp_state.prior_snd_una = tp->snd_una;
+	sk->vtcp_state.prior_rcv_nxt = tp->rcv_nxt;
+
+	sk->vtcp_state.dctcp_alpha = min(dctcp_alpha_on_init, DCTCP_MAX_ALPHA);
+
+	sk->vtcp_state.delayed_ack_reserved = 0;
+	sk->vtcp_state.ce_state = 0;
+
+	sk->vtcp_state.next_seq = tp->snd_nxt;
+
+	sk->vtcp_state.acked_bytes_ecn = 0;
+	sk->vtcp_state.acked_bytes_total = 0;
+
 	return 0;
 }
 
