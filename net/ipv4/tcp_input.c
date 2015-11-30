@@ -3561,10 +3561,10 @@ old_ack:
 	return 0;
 }
 
-#define VTCP_DCTCP_ALPHA_MAX 1024U
+#define VTCP_DCTCP_MAX_ALPHA 1024U
 static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 {
-	unsigned int dctcp_shift_g = 4;
+	unsigned int local_shift_g = 4;
 
 	struct tcp_sock *tp = tcp_sk(sk);
 	struct tcphdr *th = tcp_hdr(skb);
@@ -3603,15 +3603,15 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 
 		// Is it cheating to reach into the socket and test its cwnd? Probably...but maybe ok for
 		// this version.
-		} else if (tp->snd_cwnd > sk->vtcp.target_window) {
+		} else if (tp->snd_cwnd > sk->vtcp_state.target_window) {
 			// While we still get ecns and we haven't reduced the window to the
 			// target, keep reducing the window
 			// XXX: how does this change with alpha recomputations? Maybe we need
 			// to update the target first? Also is this too aggressive -- i.e. this
 			// is one reduction per ACK, not one reduction per RTT
-			th->window = sk->vtcp_state.last_window - 1; // XXX: "minus one" as in minus 1 packet...
+			th->window = sk->vtcp_state.last_window - tp->mss_cache; // XXX: "minus one" as in minus 1 packet...
 			printk("VTCP SAYS: Reducing CWR");
-			if (tp->snd_cwnd == sk->vctcp.target_window) {
+			if (tp->snd_cwnd == sk->vtcp_state.target_window) {
 				sk->vtcp_state.ce_state = 0;
 				tcp_ecn_queue_cwr(tp);
 
@@ -3633,9 +3633,9 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 
 		printk("VTCP SAYS: Alpha was %d", sk->vtcp_state.dctcp_alpha);
                 /* alpha = (1 - g) * alpha + g * F */
-                sk->vtcp_state.dctcp_alpha = ca->dctcp_alpha -
-                                  (sk->vtcp_state.dctcp_alpha >> dctcp_shift_g) +
-                                  (sk->vtcp_state.acked_bytes_ecn << (10U - dctcp_shift_g)) /
+                sk->vtcp_state.dctcp_alpha = sk->vtcp_state.dctcp_alpha -
+                                  (sk->vtcp_state.dctcp_alpha >> local_shift_g) +
+                                  (sk->vtcp_state.acked_bytes_ecn << (10U - local_shift_g)) /
                                   sk->vtcp_state.acked_bytes_total;
 
                 if (sk->vtcp_state.dctcp_alpha > VTCP_DCTCP_MAX_ALPHA)
