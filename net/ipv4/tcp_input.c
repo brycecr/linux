@@ -3583,8 +3583,9 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 		sk->vtcp_state.ce_state = 1;
 		//sk->vtcp_state.target_window =
 		//	max(tp->snd_cwnd - ((tp->snd_cwnd * sk->vtcp_state.dctcp_alpha) >> 11U), 2U);
+		sk->vtcp_state.target_window = max(tp->snd_cwnd - (tp->snd_cwnd/4U), 2U);
 		sk->vtcp_state.last_window = ntohs(th->window);
-		printk("VTCP SAYS: Saw a new ECN setting target window and turing CC on");
+		printk("VTCP SAYS: Saw a new ECN setting target window and turing CC on\n");
 	}
 
 	/* How do we know ECN is "no longer" being requested?
@@ -3599,7 +3600,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 			sk->vtcp_state.ce_state = 0;
 
 			// AFAIK this isn't really supposed to happen
-			printk("VTCP SAYS: Saw header without ECN without sending CWR first...");
+			printk("VTCP SAYS: Saw header without ECN without sending CWR first...\n");
 
 		// Is it cheating to reach into the socket and test its cwnd? Probably...but maybe ok for
 		// this version.
@@ -3610,13 +3611,13 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 			// to update the target first? Also is this too aggressive -- i.e. this
 			// is one reduction per ACK, not one reduction per RTT
 			th->window = htons(sk->vtcp_state.last_window - tp->mss_cache); // XXX: "minus one" as in minus 1 packet...
-			printk("VTCP SAYS: Reducing CWR");
+			printk("VTCP SAYS: Reducing CWR %u\n",ntohs(th->window));
 			if (tp->snd_cwnd == sk->vtcp_state.target_window) {
 				sk->vtcp_state.ce_state = 0;
 				tcp_ecn_queue_cwr(tp);
 
 				// SEND CWR
-				printk("VTCP SAYS: CWR SENT and CE MODE OFF");
+				printk("VTCP SAYS: CWR SENT and CE MODE OFF\n");
 			}
 		}
 		sk->vtcp_state.acked_bytes_ecn += acked_bytes;
