@@ -3610,7 +3610,8 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 			// XXX: how does this change with alpha recomputations? Maybe we need
 			// to update the target first? Also is this too aggressive -- i.e. this
 			// is one reduction per ACK, not one reduction per RTT
-			th->window = htons(sk->vtcp_state.last_window - tp->mss_cache); // XXX: "minus one" as in minus 1 packet...
+			th->window = htons(sk->vtcp_state.last_window - 1); // XXX: "minus one" as in minus 1 packet...
+			sk->vtcp_state.last_window -= 1;
 			printk("VTCP SAYS: Reducing CWR %u\n",ntohs(th->window));
 			if (tp->snd_cwnd == sk->vtcp_state.target_window) {
 				sk->vtcp_state.ce_state = 0;
