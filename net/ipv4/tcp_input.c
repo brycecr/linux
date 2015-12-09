@@ -3580,12 +3580,12 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 	 * fourth: do we already know we're supposed to reduce ecn?
 	 */
 	if (th->ece && !th->syn && (tp->ecn_flags & TCP_ECN_OK) && !sk->vtcp_state.ce_state) {
-		sk->vtcp_state.ce_state = 1;
+		sk->vtcp_state.ce_state = 2;
 		//sk->vtcp_state.target_window =
 		//	max(tp->snd_cwnd - ((tp->snd_cwnd * sk->vtcp_state.dctcp_alpha) >> 11U), 2U);
-		sk->vtcp_state.target_window = max(tp->snd_cwnd - (tp->snd_cwnd/4U), 2U);
+		sk->vtcp_state.target_window = max(ntohs(th->window)/5U, 2U);
 		sk->vtcp_state.last_window = ntohs(th->window);
-		printk("VTCP SAYS: Saw a new ECN setting target window and turing CC on\n");
+		printk("VTCP SAYS: Saw a new ECN setting target window and turing CC on, target %u last %u\n",sk->vtcp_state.target_window,sk->vtcp_state.last_window);
 	}
 
 	/* How do we know ECN is "no longer" being requested?
@@ -3594,7 +3594,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 	 * ** sent until the sender sends a CWR indicating that it has reduced its sending window
 	 * ** so we wait until we have reached the target window then send (queue) CWR
 	 */
-	if (sk->vtcp_state.ce_state) {
+	if (sk->vtcp_state.ce_state==2) {
 		if (!th->ece) {
 			// Turn off ecn mode
 			sk->vtcp_state.ce_state = 0;
@@ -3604,16 +3604,16 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 
 		// Is it cheating to reach into the socket and test its cwnd? Probably...but maybe ok for
 		// this version.
-		} else if (tp->snd_cwnd > sk->vtcp_state.target_window) {
+		} else if (sk->vtcp_state.last_window > sk->vtcp_state.target_window) {
 			// While we still get ecns and we haven't reduced the window to the
 			// target, keep reducing the window
 			// XXX: how does this change with alpha recomputations? Maybe we need
 			// to update the target first? Also is this too aggressive -- i.e. this
 			// is one reduction per ACK, not one reduction per RTT
-			th->window = htons(sk->vtcp_state.last_window - 1); // XXX: "minus one" as in minus 1 packet...
-			sk->vtcp_state.last_window -= 1;
-			printk("VTCP SAYS: Reducing CWR %u\n",ntohs(th->window));
-			if (tp->snd_cwnd == sk->vtcp_state.target_window) {
+			th->window = htons(sk->vtcp_state.target_window); // XXX: "minus one" as in minus 1 packet...
+			sk->vtcp_state.last_window -= 1500;
+			printk("VTCP SAYS: Reducing CWR %u, target is %u, last is %u\n",ntohs(th->window), sk->vtcp_state.target_window, sk->vtcp_state.last_window);
+			if (ntohs(th->window) <= sk->vtcp_state.target_window) {
 				sk->vtcp_state.ce_state = 0;
 				tcp_ecn_queue_cwr(tp);
 
@@ -3621,11 +3621,13 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 				printk("VTCP SAYS: CWR SENT and CE MODE OFF\n");
 			}
 		}
-		sk->vtcp_state.acked_bytes_ecn += acked_bytes;
+		//sk->vtcp_state.acked_bytes_ecn += acked_bytes;
+	} else if (sk->vtcp_state.ce_state == 1) {
+		printk("VTCP SAYS: SOMEBODY BE SETTING THIS TO 1");
 	}
 
-	sk->vtcp_state.prior_snd_una = tp->snd_una;
-	sk->vtcp_state.acked_bytes_total += acked_bytes;
+	//sk->vtcp_state.prior_snd_una = tp->snd_una;
+	//sk->vtcp_state.acked_bytes_total += acked_bytes;
 
         /* Expired RTT */
       //  if (!before(tp->snd_una, sk->vtcp_state.next_seq)) {

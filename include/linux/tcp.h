@@ -403,6 +403,9 @@ static inline int vtcp_init(struct sock *sk)
 	sk->vtcp_state.acked_bytes_ecn = 0;
 	sk->vtcp_state.acked_bytes_total = 0;
 
+	sk->vtcp_state.target_window = 0;
+	sk->vtcp_state.last_window = 0;
+
 	return 0;
 }
 

@@ -427,16 +427,6 @@ struct sock {
 #ifdef CONFIG_SECURITY
 	void			*sk_security;
 #endif
-	__u32			sk_mark;
-	u32			sk_classid;
-	struct cg_proto		*sk_cgrp;
-	void			(*sk_state_change)(struct sock *sk);
-	void			(*sk_data_ready)(struct sock *sk);
-	void			(*sk_write_space)(struct sock *sk);
-	void			(*sk_error_report)(struct sock *sk);
-	int			(*sk_backlog_rcv)(struct sock *sk,
-						  struct sk_buff *skb);
-	void                    (*sk_destruct)(struct sock *sk);
 
 	/* this might be a terrible idea because sock is a basic
 	 * data structure so it is quite likely that assumptions are made
@@ -454,6 +444,17 @@ struct sock {
 		u32 target_window;
 		u32 last_window;
 	} vtcp_state;
+
+	__u32			sk_mark;
+	u32			sk_classid;
+	struct cg_proto		*sk_cgrp;
+	void			(*sk_state_change)(struct sock *sk);
+	void			(*sk_data_ready)(struct sock *sk);
+	void			(*sk_write_space)(struct sock *sk);
+	void			(*sk_error_report)(struct sock *sk);
+	int			(*sk_backlog_rcv)(struct sock *sk,
+						  struct sk_buff *skb);
+	void                    (*sk_destruct)(struct sock *sk);
 };
 
 #define __sk_user_data(sk) ((*((void __rcu **)&(sk)->sk_user_data)))
