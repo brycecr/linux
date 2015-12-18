@@ -3571,7 +3571,6 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
       struct tcphdr *th = tcp_hdr(skb);
 	u32 acked_bytes = tp->snd_una - sk->vtcp_state.prior_snd_una;
 
-	printk("VTCP SAYS: sysctl_tcp_ecn says %u\n", net->ipv4.sysctl_tcp_ecn);
 	if (net->ipv4.sysctl_tcp_ecn == 1) {
 		/* Check if ECN is set on the incoming ACK header.
 		 * and start reducing cwnd if so.
@@ -3588,6 +3587,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 			//	max(tp->snd_cwnd - ((tp->snd_cwnd * sk->vtcp_state.dctcp_alpha) >> 11U), 2U);
 			sk->vtcp_state.target_window = max(ntohs(th->window)/2U, 2U);
 			sk->vtcp_state.last_window = ntohs(th->window);
+			printk("VTCP SAYS: window %u snd_cwnd %u\n",sk->vtcp_state.last_window, tp->snd_cwnd);
 			printk("VTCP SAYS: Saw a new ECN setting target window and turing CC on, target %u last %u\n",sk->vtcp_state.target_window,sk->vtcp_state.last_window);
 		}
 
@@ -3613,7 +3613,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 				// XXX: how does this change with alpha recomputations? Maybe we need
 				// to update the target first? Also is this too aggressive -- i.e. this
 				// is one reduction per ACK, not one reduction per RTT
-				th->window = htons(sk->vtcp_state.target_window); // XXX: "minus one" as in minus 1 packet...
+				th->window = htons(sk->vtcp_state.last_window); // XXX: "minus one" as in minus 1 packet...
 				sk->vtcp_state.last_window -= 1500;
 				printk("VTCP SAYS: Reducing CWR %u, target is %u, last is %u\n",ntohs(th->window), sk->vtcp_state.target_window, sk->vtcp_state.last_window);
 				if (sk->vtcp_state.last_window <= sk->vtcp_state.target_window) {
@@ -3654,9 +3654,6 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 
 
 	      // always shield the guest from ECN
-	      if (th->ece) {
-		printk("VTCP SAYS: ece was %u", th->ece);
-	      }
 	      th->ece = 0;
 
 	}
