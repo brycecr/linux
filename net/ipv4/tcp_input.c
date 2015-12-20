@@ -3568,7 +3568,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 	unsigned int local_shift_g = 4;
 
 	struct tcp_sock *tp = tcp_sk(sk);
-      struct tcphdr *th = tcp_hdr(skb);
+        struct tcphdr *th = tcp_hdr(skb);
 	u32 acked_bytes = tp->snd_una - sk->vtcp_state.prior_snd_una;
 
 	if (net->ipv4.sysctl_tcp_ecn == 1) {
@@ -3585,10 +3585,9 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 			sk->vtcp_state.ce_state = 2;
 			//sk->vtcp_state.target_window =
 			//	max(tp->snd_cwnd - ((tp->snd_cwnd * sk->vtcp_state.dctcp_alpha) >> 11U), 2U);
-			sk->vtcp_state.target_window = max(ntohs(th->window)/2U, 2U);
-			sk->vtcp_state.last_window = ntohs(th->window);
-			printk("VTCP SAYS: window %u snd_cwnd %u\n",sk->vtcp_state.last_window, tp->snd_cwnd);
-			printk("VTCP SAYS: Saw a new ECN setting target window and turing CC on, target %u last %u\n",sk->vtcp_state.target_window,sk->vtcp_state.last_window);
+			sk->vtcp_state.target_window = max(tp->snd_cwnd/2U, 2U);
+			sk->vtcp_state.last_window = tp->snd_cwnd;
+			//printk("VTCP SAYS: Saw a new ECN setting target window and turing CC on, target %u last %u\n",sk->vtcp_state.target_window,sk->vtcp_state.last_window);
 		}
 
 		/* How do we know ECN is "no longer" being requested?
@@ -3603,7 +3602,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 				sk->vtcp_state.ce_state = 0;
 
 				// AFAIK this isn't really supposed to happen
-				printk("VTCP SAYS: Saw header without ECN without sending CWR first...\n");
+				//printk("VTCP SAYS: Saw header without ECN without sending CWR first...\n");
 
 			// Is it cheating to reach into the socket and test its cwnd? Probably...but maybe ok for
 			// this version.
@@ -3614,19 +3613,20 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 				// to update the target first? Also is this too aggressive -- i.e. this
 				// is one reduction per ACK, not one reduction per RTT
 				th->window = htons(sk->vtcp_state.last_window); // XXX: "minus one" as in minus 1 packet...
-				sk->vtcp_state.last_window -= 1500;
-				printk("VTCP SAYS: Reducing CWR %u, target is %u, last is %u\n",ntohs(th->window), sk->vtcp_state.target_window, sk->vtcp_state.last_window);
+				sk->vtcp_state.last_window  = max (tcp_packets_in_flight(tp), sk->vtcp_state.target_window);
+				//printk("VTCP SAYS: Reducing CWR %u, target is %u, last is %u\n",ntohs(th->window), sk->vtcp_state.target_window, sk->vtcp_state.last_window);
 				if (sk->vtcp_state.last_window <= sk->vtcp_state.target_window) {
 					sk->vtcp_state.ce_state = 0;
 					tcp_ecn_queue_cwr(tp);
+					tp->snd_cwnd = sk->vtcp_state.target_window * 3;
 
 					// SEND CWR
-					printk("VTCP SAYS: CWR SENT and CE MODE OFF\n");
+					//printk("VTCP SAYS: CWR SENT and CE MODE OFF\n");
 				}
 			}
 			//sk->vtcp_state.acked_bytes_ecn += acked_bytes;
 		} else if (sk->vtcp_state.ce_state == 1) {
-			printk("VTCP SAYS: SOMEBODY BE SETTING THIS TO 1");
+			//printk("VTCP SAYS: SOMEBODY BE SETTING THIS TO 1");
 		}
 
 	      //sk->vtcp_state.prior_snd_una = tp->snd_una;
