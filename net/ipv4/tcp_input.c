@@ -3585,6 +3585,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 			sk->vtcp_state.ce_state = 2;
 			//sk->vtcp_state.target_window =
 			//	max(tp->snd_cwnd - ((tp->snd_cwnd * sk->vtcp_state.dctcp_alpha) >> 11U), 2U);
+	      		sk->vtcp_state.acked_bytes_total = tp->snd_cwnd;
 			sk->vtcp_state.target_window = max(tp->snd_cwnd/2U, 2U);
 			sk->vtcp_state.last_window = tp->snd_cwnd;
 			//printk("VTCP SAYS: Saw a new ECN setting target window and turing CC on, target %u last %u\n",sk->vtcp_state.target_window,sk->vtcp_state.last_window);
@@ -3628,7 +3629,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 		} else if (sk->vtcp_state.ce_state == 1) {
 			sk->vtcp_state.last_window += 1;
 			th->window = htons(sk->vtcp_state.last_window); // XXX: "minus one" as in minus 1 packet...
-			if (sk->vtcp_state.last_window >= tp->snd_cwnd) {
+			if (sk->vtcp_state.last_window >= sk->vtcp_state.acked_bytes_total) {
 					sk->vtcp_state.ce_state = 0;
 			}
 			//printk("VTCP SAYS: SOMEBODY BE SETTING THIS TO 1");
