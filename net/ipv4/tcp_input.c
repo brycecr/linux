@@ -3565,7 +3565,7 @@ old_ack:
 static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 {
 	const struct net *net = sock_net(sk);
-	unsigned int local_shift_g = 4;
+	//unsigned int local_shift_g = 4;
 
 	struct tcp_sock *tp = tcp_sk(sk);
         struct tcphdr *th = tcp_hdr(skb);
@@ -3612,13 +3612,13 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 				// XXX: how does this change with alpha recomputations? Maybe we need
 				// to update the target first? Also is this too aggressive -- i.e. this
 				// is one reduction per ACK, not one reduction per RTT
-				th->window = htons(sk->vtcp_state.last_window); // XXX: "minus one" as in minus 1 packet...
 				sk->vtcp_state.last_window  = max (tcp_packets_in_flight(tp), sk->vtcp_state.target_window);
+				th->window = htons(sk->vtcp_state.last_window); // XXX: "minus one" as in minus 1 packet...
 				//printk("VTCP SAYS: Reducing CWR %u, target is %u, last is %u\n",ntohs(th->window), sk->vtcp_state.target_window, sk->vtcp_state.last_window);
 				if (sk->vtcp_state.last_window <= sk->vtcp_state.target_window) {
-					sk->vtcp_state.ce_state = 0;
+					sk->vtcp_state.ce_state = 1;
 					tcp_ecn_queue_cwr(tp);
-					tp->snd_cwnd = sk->vtcp_state.target_window * 3;
+					//tp->snd_cwnd = sk->vtcp_state.target_window;
 
 					// SEND CWR
 					//printk("VTCP SAYS: CWR SENT and CE MODE OFF\n");
@@ -3626,6 +3626,11 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 			}
 			//sk->vtcp_state.acked_bytes_ecn += acked_bytes;
 		} else if (sk->vtcp_state.ce_state == 1) {
+			sk->vtcp_state.last_window += 1;
+			th->window = htons(sk->vtcp_state.last_window); // XXX: "minus one" as in minus 1 packet...
+			if (sk->vtcp_state.last_window >= tp->snd_cwnd) {
+					sk->vtcp_state.ce_state = 0;
+			}
 			//printk("VTCP SAYS: SOMEBODY BE SETTING THIS TO 1");
 		}
 
@@ -3655,7 +3660,6 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 
 	      // always shield the guest from ECN
 	      th->ece = 0;
-
 	}
 	return __tcp_ack(sk, skb, flag);
 
