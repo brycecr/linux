@@ -3572,28 +3572,23 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 	u32 acked_bytes = tp->snd_una - sk->vtcp_state.prior_snd_una;
 
 	if (net->ipv4.sysctl_tcp_ecn == 1) {
-		/* Check if ECN is set on the incoming ACK header.
-		 * and start reducing cwnd if so.
-		 * If it is then we can start reducing the recieve window
-		 * XXX: do we need all these checks?
-		 * first: is there ece
-		 * second: is this not a syn? (syn ECE is actually a notational detail)
-		 * third: is ecn on for this socket? derives from user options and settings
-		 * fourth: do we already know we're supposed to reduce ecn?
+		/* 
+		 * This block initiates throttling.
+		 * first: does current packet have ECE?
+		 * second: is this not a syn? (ECN on SYN is negotiation, not congestion signal)
+		 * third: is ecn on for this socket?
+		 * fourth: are we already reducing ecn? (avoid trying to hit a moving target)
 		 */
 		if (th->ece && !th->syn && (tp->ecn_flags & TCP_ECN_OK) && sk->vtcp_state.ce_state != 2) {
 			if (sk->vtcp_state.ce_state == 1) {
-				sk->vtcp_state.acked_bytes_total;
-				sk->vtcp_state.target_window = max(sk->vtcp_state.target_window/2U, 2U);
-				sk->vtcp_state.last_window = sk->vtcp_state.last_window;
+				// in throttled growth state, halve window and start reducing
+				sk->vtcp_state.target_window = max(sk->vtcp_state.last_window/2U, 2U);
 				sk->vtcp_state.ce_state = 2;
 				tcp_ecn_queue_cwr(tp);
 				return __tcp_ack(sk, skb, flag);
 				printk("VTCP SAYS: killed while growing, target %u last %u\n",sk->vtcp_state.target_window,sk->vtcp_state.last_window);
 			} else {
 				sk->vtcp_state.ce_state = 2;
-				//sk->vtcp_state.target_window =
-				//	max(tp->snd_cwnd - ((tp->snd_cwnd * sk->vtcp_state.dctcp_alpha) >> 11U), 2U);
 				sk->vtcp_state.acked_bytes_total = tp->snd_cwnd;
 				sk->vtcp_state.target_window = max(tp->snd_cwnd/2U, 2U);
 				sk->vtcp_state.last_window = tp->snd_cwnd;
@@ -3602,144 +3597,48 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 		}
 
 		/* How do we know ECN is "no longer" being requested?
-		 * I am guessing, probably incorrectly, that this is when we no longer see ecn
-		 * ** It looks like actually what's supposed to happen is that ECE keeps getting
-		 * ** sent until the sender sends a CWR indicating that it has reduced its sending window
-		 * ** so we wait until we have reached the target window then send (queue) CWR
+		 * It looks like actually what's supposed to happen is that ECE keeps getting
+		 * sent until the sender sends a CWR indicating that it has reduced its sending window
+		 * so we wait until we have reached the target window then send (queue) CWR. It may not
+		 * really matter if we do this then or when we start to have the intention to lower the window,
+		 * however.
 		 */
 		if (sk->vtcp_state.ce_state==2) {
 			if (!th->ece) {
 				// Turn off ecn mode
 				sk->vtcp_state.ce_state = 0;
-
 				// AFAIK this isn't really supposed to happen
 				printk("VTCP SAYS: Saw header without ECN without sending CWR first...\n");
 
-			// Is it cheating to reach into the socket and test its cwnd? Probably...but maybe ok for
-			// this version.
 			} else if (sk->vtcp_state.last_window > sk->vtcp_state.target_window) {
-				// While we still get ecns and we haven't reduced the window to the
-				// target, keep reducing the window
-				// XXX: how does this change with alpha recomputations? Maybe we need
-				// to update the target first? Also is this too aggressive -- i.e. this
-				// is one reduction per ACK, not one reduction per RTT
 				sk->vtcp_state.last_window  = max (tcp_packets_in_flight(tp), sk->vtcp_state.target_window);
 				th->window = htons(sk->vtcp_state.last_window); // XXX: "minus one" as in minus 1 packet...
-				//printk("VTCP SAYS: Reducing CWR %u, target is %u, last is %u\n",ntohs(th->window), sk->vtcp_state.target_window, sk->vtcp_state.last_window);
 				if (sk->vtcp_state.last_window <= sk->vtcp_state.target_window) {
 					sk->vtcp_state.ce_state = 1;
 					sk->vtcp_state.prior_snd_una = 0;
 					tcp_ecn_queue_cwr(tp);
-					//tp->snd_cwnd = sk->vtcp_state.target_window;
 
 					// SEND CWR
 					printk("VTCP SAYS: CWR SENT and CE MODE to 1\n");
 				}
 			}
-			//sk->vtcp_state.acked_bytes_ecn += acked_bytes;
 		} else if (sk->vtcp_state.ce_state == 1) {
 			sk->vtcp_state.prior_snd_una += 1;
 			if (sk->vtcp_state.prior_snd_una >= 1) {
 				sk->vtcp_state.last_window += 1;
 				sk->vtcp_state.prior_snd_una = 0;
 			}
-			th->window = htons(sk->vtcp_state.last_window); // XXX: "minus one" as in minus 1 packet...
+			th->window = htons(sk->vtcp_state.last_window);
 			if (sk->vtcp_state.last_window >= sk->vtcp_state.acked_bytes_total) {
 					sk->vtcp_state.ce_state = 0;
 					printk("VTCP SAYS: CE MODE to 0\n");
 			}
-			//printk("VTCP SAYS: SOMEBODY BE SETTING THIS TO 1");
 		}
-
-	      //sk->vtcp_state.prior_snd_una = tp->snd_una;
-	      //sk->vtcp_state.acked_bytes_total += acked_bytes;
-
-	      /* Expired RTT */
-	    //  if (!before(tp->snd_una, sk->vtcp_state.next_seq)) {
-	    //          /* For avoiding denominator == 1. */
-	    //          if (sk->vtcp_state.acked_bytes_total == 0)
-	    //                  sk->vtcp_state.acked_bytes_total = 1;
-
-	    //  	printk("VTCP SAYS: Alpha was %d", sk->vtcp_state.dctcp_alpha);
-	    //          /* alpha = (1 - g) * alpha + g * F */
-	    //          sk->vtcp_state.dctcp_alpha = sk->vtcp_state.dctcp_alpha -
-	    //                            (sk->vtcp_state.dctcp_alpha >> local_shift_g) +
-	    //                            (sk->vtcp_state.acked_bytes_ecn << (10U - local_shift_g)) /
-	    //                            sk->vtcp_state.acked_bytes_total;
-
-	    //          if (sk->vtcp_state.dctcp_alpha > VTCP_DCTCP_MAX_ALPHA)
-	    //                  /* Clamp dctcp_alpha to max. */
-	    //                  sk->vtcp_state.dctcp_alpha = VTCP_DCTCP_MAX_ALPHA;
-
-	    //  	printk("VTCP SAYS: Alpha is now %d", sk->vtcp_state.dctcp_alpha);
-	    //  }
-
 
 	      // always shield the guest from ECN
 	      th->ece = 0;
 	}
 	return __tcp_ack(sk, skb, flag);
-
-	//This if/else if is just basic state control for dctcp 
-	//(I think this is actually the state machine for recievers, not senders......)
-//	if ((TCP_SKB_CB(skb)->ip_dsfield & INET_ECN_MASK) == INET_ECN_CE) {
-//		// Turn on DCTCP ECN reaction mode for this socket
-//		printk("VTCP SAYS: Moving to ECN state 1\n");
-//
-//		// Handle delayed ack
-//		/* State has changed from CE=0 to CE=1 and delayed
-//		 * ACK has not sent yet.
-//		 */
-//		if (!sk->vtcp_state.ce_state && sk->vtcp_state.delayed_ack_reserved) {
-//			u32 tmp_rcv_nxt;
-//
-//			/* Save current rcv_nxt. */
-//			tmp_rcv_nxt = tp->rcv_nxt;
-//
-//			/* Generate previous ack with CE=0. */
-//			tp->ecn_flags &= ~TCP_ECN_DEMAND_CWR;
-//			tp->rcv_nxt = sk->vtcp_state.prior_rcv_nxt;
-//
-//			tcp_send_ack(sk);
-//
-//			/* Recover current rcv_nxt. */
-//			tp->rcv_nxt = tmp_rcv_nxt;
-//		}
-//		sk->vtcp_state.prior_rcv_nxt = tp->rcv_nxt;
-//		sk->vtcp_state.ce_state = 1;
-//		tp->ecn_flags |= TCP_ECN_DEMAND_CWR;
-//
-//		// we need to set the threshold above which we don't let packets through.
-//		// cwnd_bot, cwnd_top, need to set this to cwnd_bot+cwnd_top * (1-alpha/2)
-//	} else if ((TCP_SKB_CB(skb)->ip_dsfield & INET_ECN_MASK) != INET_ECN_NOT_ECT) {
-//		// reset connection status
-//		printk("VTCP SAYS: Moving to ECN state 0\n");
-//
-//		/* State has changed from CE=1 to CE=0 and delayed
-//		 * ACK has not sent yet.
-//		 */
-//		if (sk->vtcp_state.ce_state && sk->vtcp_state.delayed_ack_reserved) {
-//			u32 tmp_rcv_nxt;
-//
-//			/* Save current rcv_nxt. */
-//			tmp_rcv_nxt = tp->rcv_nxt;
-//
-//			/* Generate previous ack with CE=1. */
-//			tp->ecn_flags |= TCP_ECN_DEMAND_CWR;
-//			tp->rcv_nxt = sk->vtcp_state.prior_rcv_nxt;
-//
-//			tcp_send_ack(sk);
-//
-//			/* Recover current rcv_nxt. */
-//			tp->rcv_nxt = tmp_rcv_nxt;
-//		}
-//
-//		sk->vtcp_state.prior_rcv_nxt = tp->rcv_nxt;
-//		sk->vtcp_state.ce_state = 0;
-//
-//		tp->ecn_flags &= ~TCP_ECN_DEMAND_CWR;
-//	}
-//
 }
 
 /* Look for tcp options. Normally only called on SYN and SYNACK packets.
