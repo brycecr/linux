@@ -3583,10 +3583,13 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 		 */
 		if (th->ece && !th->syn && (tp->ecn_flags & TCP_ECN_OK) && sk->vtcp_state.ce_state != 2) {
 			if (sk->vtcp_state.ce_state == 1) {
-				sk->vtcp_state.acked_bytes_total = sk->vtcp_state.last_window;
+				sk->vtcp_state.acked_bytes_total;
 				sk->vtcp_state.target_window = max(sk->vtcp_state.target_window/2U, 2U);
 				sk->vtcp_state.last_window = sk->vtcp_state.last_window;
 				sk->vtcp_state.ce_state = 2;
+				tcp_ecn_queue_cwr(tp);
+				return __tcp_ack(sk, skb, flag);
+				printk("VTCP SAYS: killed while growing, target %u last %u\n",sk->vtcp_state.target_window,sk->vtcp_state.last_window);
 			} else {
 				sk->vtcp_state.ce_state = 2;
 				//sk->vtcp_state.target_window =
@@ -3594,8 +3597,8 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 				sk->vtcp_state.acked_bytes_total = tp->snd_cwnd;
 				sk->vtcp_state.target_window = max(tp->snd_cwnd/2U, 2U);
 				sk->vtcp_state.last_window = tp->snd_cwnd;
+				printk("VTCP SAYS: Saw a new ECN setting target window and turing CC on, target %u last %u\n",sk->vtcp_state.target_window,sk->vtcp_state.last_window);
 			}
-			printk("VTCP SAYS: Saw a new ECN setting target window and turing CC on, target %u last %u\n",sk->vtcp_state.target_window,sk->vtcp_state.last_window);
 		}
 
 		/* How do we know ECN is "no longer" being requested?
