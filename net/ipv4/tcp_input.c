@@ -3596,7 +3596,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 				// outcome is to reduce the number of times this happens to only once per rtt...
 				// perhaps what is happening is that a whole window's worth of ecns come through here, but this path is idempotent
 				// with this return -- without it, this path is definitely not idempotent
-				tcp_ecn_queue_cwr(tp);
+	      			th->ece = 0;
 				return __tcp_ack(sk, skb, flag); 
 				printk("VTCP SAYS: killed while growing, target %u last %u\n",sk->vtcp_state.target_window,sk->vtcp_state.last_window);
 			} else {
