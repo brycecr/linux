@@ -3644,6 +3644,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 	      // always shield the guest from ECN
 	      th->ece = 0;
 	}
+	// We're a wrapper, remember =] ?
 	return __tcp_ack(sk, skb, flag);
 }
 
