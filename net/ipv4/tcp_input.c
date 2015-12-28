@@ -3597,8 +3597,8 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 				// perhaps what is happening is that a whole window's worth of ecns come through here, but this path is idempotent
 				// with this return -- without it, this path is definitely not idempotent
 	      			th->ece = 0;
-				return __tcp_ack(sk, skb, flag); 
 				printk("VTCP SAYS: killed while growing, target %u last %u\n",sk->vtcp_state.target_window,sk->vtcp_state.last_window);
+				return __tcp_ack(sk, skb, flag); 
 			} else {
 				// state transfer: no throttling to reducing window
 				sk->vtcp_state.ce_state = 2;
@@ -3606,6 +3606,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 				sk->vtcp_state.target_window = max(tp->snd_cwnd/2U, 2U);
 				sk->vtcp_state.last_window = tp->snd_cwnd;
 				printk("VTCP SAYS: Saw a new ECN setting target window and turing CC on, target %u last %u\n",sk->vtcp_state.target_window,sk->vtcp_state.last_window);
+				return __tcp_ack(sk, skb, flag); 
 			}
 		}
 
