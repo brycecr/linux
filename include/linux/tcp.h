@@ -309,6 +309,23 @@ struct tcp_sock {
 	struct tcp_md5sig_info	__rcu *md5sig_info;
 #endif
 
+	/* this might be a terrible idea because sock is a basic
+	 * data structure so it is quite likely that assumptions are made
+	 * about its size or what is at the end of it...
+	 * in that likely case, here goes nothing */
+	struct {
+		u32 acked_bytes_ecn;
+		u32 acked_bytes_total;
+		u32 prior_snd_una;
+		u32 prior_rcv_nxt;
+		u32 dctcp_alpha;
+		u32 next_seq;
+		u32 ce_state;
+		u32 delayed_ack_reserved;
+		u32 target_window;
+		u32 last_window;
+	} vtcp_state;
+
 /* TCP fastopen related information */
 	struct tcp_fastopen_request *fastopen_req;
 	/* fastopen_rsk points to request_sock that resulted in this big
@@ -388,23 +405,23 @@ static inline int vtcp_init(struct sock *sk)
 	 *   (sk->sk_state == TCP_LISTEN ||
 	 *    sk->sk_state == TCP_CLOSE)) {
 	 */
-	const struct tcp_sock *tp = tcp_sk(sk);
+	struct tcp_sock *tp = tcp_sk(sk);
 
-	sk->vtcp_state.prior_snd_una = tp->snd_una;
-	sk->vtcp_state.prior_rcv_nxt = tp->rcv_nxt;
+	tp->vtcp_state.prior_snd_una = tp->snd_una;
+	tp->vtcp_state.prior_rcv_nxt = tp->rcv_nxt;
 
-	sk->vtcp_state.dctcp_alpha = 1024U; // should be configurable...but isn't. Yet.
+	tp->vtcp_state.dctcp_alpha = 1024U; // should be configurable...but isn't. Yet.
 
-	sk->vtcp_state.delayed_ack_reserved = 0;
-	sk->vtcp_state.ce_state = 0;
+	tp->vtcp_state.delayed_ack_reserved = 0;
+	tp->vtcp_state.ce_state = 0;
 
-	sk->vtcp_state.next_seq = tp->snd_nxt;
+	tp->vtcp_state.next_seq = tp->snd_nxt;
 
-	sk->vtcp_state.acked_bytes_ecn = 0;
-	sk->vtcp_state.acked_bytes_total = 0;
+	tp->vtcp_state.acked_bytes_ecn = 0;
+	tp->vtcp_state.acked_bytes_total = 0;
 
-	sk->vtcp_state.target_window = 0;
-	sk->vtcp_state.last_window = 0;
+	tp->vtcp_state.target_window = 0;
+	tp->vtcp_state.last_window = 0;
 
 	return 0;
 }

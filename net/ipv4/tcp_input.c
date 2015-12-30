@@ -3569,7 +3569,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 
 	struct tcp_sock *tp = tcp_sk(sk);
         struct tcphdr *th = tcp_hdr(skb);
-	u32 acked_bytes = tp->snd_una - sk->vtcp_state.prior_snd_una;
+	//u32 acked_bytes = tp->snd_una - sk->vtcp_state.prior_snd_una;
 
 	/* 
 	 * Guard this so that sysctl can act as a proxy for turning on
@@ -3585,29 +3585,36 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 		 * third: is ecn on for this socket?
 		 * fourth: are we already reducing ecn? (avoid trying to hit a moving target)
 		 */
-		if (th->ece && !th->syn && (tp->ecn_flags & TCP_ECN_OK) && sk->vtcp_state.ce_state != 2) {
-			if (sk->vtcp_state.ce_state == 1) {
+		if (th->ece && !th->syn && (tp->ecn_flags & TCP_ECN_OK) && tp->vtcp_state.ce_state != 2 
+			&& (tcp_time_stamp - tp->vtcp_state.delayed_ack_reserved > tp->rcv_rtt_est.rtt)) {
+			printk("VTCP SAYS: HEY %u\n", tp->vtcp_state.ce_state);
+			if (tp->vtcp_state.ce_state == 1) {
 				// in throttled growth state, halve window and start reducing
-				sk->vtcp_state.target_window = max(sk->vtcp_state.last_window/2U, 2U); // halve the current window
-				sk->vtcp_state.ce_state = 2; // decreasing mode
-				//tcp_ecn_queue_cwr(tp); // may or may not need this right here, but being proactive about telling reciever we heard them
+				tp->vtcp_state.target_window = max(tp->vtcp_state.last_window/2U, 2U); // halve the current window
+				tp->vtcp_state.ce_state = 2; // decreasing mode
+
 				// DO NOT go on to the subsequent part of this function, i.e. actually reducing the window
 				// for some reason this makes a big difference -- the window pretty much crashes without it. Perhaps the rough
 				// outcome is to reduce the number of times this happens to only once per rtt...
 				// perhaps what is happening is that a whole window's worth of ecns come through here, but this path is idempotent
 				// with this return -- without it, this path is definitely not idempotent
-	      			th->ece = 0;
-				printk("VTCP SAYS: killed while growing, target %u last %u\n",sk->vtcp_state.target_window,sk->vtcp_state.last_window);
-				return __tcp_ack(sk, skb, flag); 
+	      			//th->ece = 0;
+				printk("VTCP SAYS: killed while growing, target %u last %u\n",tp->vtcp_state.target_window,tp->vtcp_state.last_window);
+
+				//return __tcp_ack(sk, skb, flag); 
 			} else {
 				// state transfer: no throttling to reducing window
-				sk->vtcp_state.ce_state = 2;
-				sk->vtcp_state.acked_bytes_total = tp->snd_cwnd;
-				sk->vtcp_state.target_window = max(tp->snd_cwnd/2U, 2U);
-				sk->vtcp_state.last_window = tp->snd_cwnd;
-				printk("VTCP SAYS: Saw a new ECN setting target window and turing CC on, target %u last %u\n",sk->vtcp_state.target_window,sk->vtcp_state.last_window);
-				return __tcp_ack(sk, skb, flag); 
+				tp->vtcp_state.ce_state = 2;
+				tp->vtcp_state.acked_bytes_total = tp->snd_cwnd;
+				tp->vtcp_state.target_window = max(tp->snd_cwnd/2U, 2U);
+				tp->vtcp_state.last_window = tp->snd_cwnd;
+
+				printk("VTCP SAYS: Saw a new ECN setting target window and turing CC on, target %u last %u\n",tp->vtcp_state.target_window,tp->vtcp_state.last_window);
+	      			//th->ece = 0;
+
+				//return __tcp_ack(sk, skb, flag); 
 			}
+			tp->vtcp_state.delayed_ack_reserved = tcp_time_stamp;
 		}
 
 		/* How do we know ECN is "no longer" being requested?
@@ -3617,29 +3624,30 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 		 * really matter if we do this then or when we start to have the intention to lower the window,
 		 * however.
 		 */
-		if (sk->vtcp_state.ce_state==2) {
+		if (tp->vtcp_state.ce_state==2) {
 			if (!th->ece) {
 				// Receiver stopped sending us ECE before we sent cwr
 				// AFAIK this isn't really supposed to happen. We ignore it.
-				sk->vtcp_state.ce_state = 0;
+				//tp->vtcp_state.ce_state = 0;
 				printk("VTCP SAYS: Saw header without ECN without sending CWR first...\n");
-			} else if (sk->vtcp_state.last_window > sk->vtcp_state.target_window) {
-				sk->vtcp_state.last_window  = max (tcp_packets_in_flight(tp), sk->vtcp_state.target_window);
-				th->window = htons(sk->vtcp_state.last_window);
-				if (sk->vtcp_state.last_window <= sk->vtcp_state.target_window) {
-					sk->vtcp_state.ce_state = 1;
-					tcp_ecn_queue_cwr(tp);
+			} else 
+			if (tp->vtcp_state.last_window > tp->vtcp_state.target_window) {
+				tp->vtcp_state.last_window  = max (tcp_packets_in_flight(tp), tp->vtcp_state.target_window);
+				th->window = htons(tp->vtcp_state.last_window);
+				if (tp->vtcp_state.last_window <= tp->vtcp_state.target_window) {
+					tp->vtcp_state.ce_state = 1;
 					printk("VTCP SAYS: CWR SENT and CE MODE to 1\n");
 				}
 			}
-		} else if (sk->vtcp_state.ce_state == 1) {
+		} else if (tp->vtcp_state.ce_state == 1) {
 			// throttled growth mode: grow by one packet for each packet acked
-			sk->vtcp_state.last_window += 1;
-			th->window = htons(sk->vtcp_state.last_window);
+			tp->vtcp_state.last_window += 1;
+			th->window = htons(tp->vtcp_state.last_window);
 			// hmmm...maybe this does nothing and is incorrect. Can we EVER return to guest-managed
 			// TCP??
-			if (sk->vtcp_state.last_window >= sk->vtcp_state.acked_bytes_total) {
-					sk->vtcp_state.ce_state = 0;
+			//if (tp->vtcp_state.last_window >= tp->vtcp_state.acked_bytes_total) {
+			if (tp->vtcp_state.last_window >= tp->snd_cwnd) {
+					//tp->vtcp_state.ce_state = 0;
 					printk("VTCP SAYS: CE MODE to 0\n");
 			}
 		}
@@ -3647,6 +3655,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 	      // always shield the guest from ECN
 	      th->ece = 0;
 	}
+
 	// We're a wrapper, remember =] ?
 	return __tcp_ack(sk, skb, flag);
 }
