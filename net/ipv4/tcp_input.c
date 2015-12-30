@@ -3585,8 +3585,8 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 		 * third: is ecn on for this socket?
 		 * fourth: are we already reducing ecn? (avoid trying to hit a moving target)
 		 */
-		if (th->ece && !th->syn && (tp->ecn_flags & TCP_ECN_OK) && tp->vtcp_state.ce_state != 2 
-			&& (tcp_time_stamp - tp->vtcp_state.delayed_ack_reserved > tp->rcv_rtt_est.rtt)) {
+		if (th->ece && !th->syn && (tp->ecn_flags & TCP_ECN_OK) && tp->vtcp_state.ce_state != 2
+			&& (!tp->vtcp_state.next_seq || tp->vtcp_state.delayed_ack_reserved > tp->vtcp_state.next_seq) ) {
 			printk("VTCP SAYS: HEY %u\n", tp->vtcp_state.ce_state);
 			if (tp->vtcp_state.ce_state == 1) {
 				// in throttled growth state, halve window and start reducing
@@ -3614,7 +3614,8 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 
 				//return __tcp_ack(sk, skb, flag); 
 			}
-			tp->vtcp_state.delayed_ack_reserved = tcp_time_stamp;
+			tp->vtcp_state.delayed_ack_reserved = 0;
+			tp->vtcp_state.delayed_ack_reserved = tp->vtcp_state.next_seq;
 		}
 
 		/* How do we know ECN is "no longer" being requested?
@@ -3636,9 +3637,12 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 				th->window = htons(tp->vtcp_state.last_window);
 				if (tp->vtcp_state.last_window <= tp->vtcp_state.target_window) {
 					tp->vtcp_state.ce_state = 1;
+					tp->vtcp_state.next_seq = 0;
+					tcp_ecn_queue_cwr(tp);
 					printk("VTCP SAYS: CWR SENT and CE MODE to 1\n");
 				}
 			}
+			tp->vtcp_state.delayed_ack_reserved += 1;
 		} else if (tp->vtcp_state.ce_state == 1) {
 			// throttled growth mode: grow by one packet for each packet acked
 			tp->vtcp_state.last_window += 1;
@@ -3647,8 +3651,8 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 			// TCP??
 			//if (tp->vtcp_state.last_window >= tp->vtcp_state.acked_bytes_total) {
 			if (tp->vtcp_state.last_window >= tp->snd_cwnd) {
-					//tp->vtcp_state.ce_state = 0;
-					printk("VTCP SAYS: CE MODE to 0\n");
+				//tp->vtcp_state.ce_state = 0;
+				printk("VTCP SAYS: CE MODE to 0\n");
 			}
 		}
 
