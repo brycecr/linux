@@ -3615,7 +3615,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 				//return __tcp_ack(sk, skb, flag); 
 			}
 			tp->vtcp_state.delayed_ack_reserved = 0;
-			tp->vtcp_state.delayed_ack_reserved = tp->vtcp_state.next_seq;
+			tp->vtcp_state.next_seq = tcp_packets_in_flight(tp);
 		}
 
 		/* How do we know ECN is "no longer" being requested?
@@ -3637,15 +3637,30 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 				th->window = htons(tp->vtcp_state.last_window);
 				if (tp->vtcp_state.last_window <= tp->vtcp_state.target_window) {
 					tp->vtcp_state.ce_state = 1;
-					tp->vtcp_state.next_seq = 0;
 					tcp_ecn_queue_cwr(tp);
 					printk("VTCP SAYS: CWR SENT and CE MODE to 1\n");
 				}
 			}
-			tp->vtcp_state.delayed_ack_reserved += 1;
 		} else if (tp->vtcp_state.ce_state == 1) {
 			// throttled growth mode: grow by one packet for each packet acked
-			tp->vtcp_state.last_window += 1;
+
+//void tcp_cong_avoid_ai(struct tcp_sock *tp, u32 w, u32 acked)
+//{
+//	tp->snd_cwnd_cnt += acked;
+//	if (tp->snd_cwnd_cnt >= w) {
+//		u32 delta = tp->snd_cwnd_cnt / w;
+//
+//		tp->snd_cwnd_cnt -= delta * w;
+//		tp->snd_cwnd += delta;
+//	}
+//	tp->snd_cwnd = min(tp->snd_cwnd, tp->snd_cwnd_clamp);
+//}
+			if (tp->vtcp_state.prior_snd_una >= tp->vtcp_state.last_window) {
+				tp->vtcp_state.last_window += 1;
+				tp->vtcp_state.prior_snd_una = 0;
+			} else {
+				tp->vtcp_state.prior_snd_una += 1;
+			}
 			th->window = htons(tp->vtcp_state.last_window);
 			// hmmm...maybe this does nothing and is incorrect. Can we EVER return to guest-managed
 			// TCP??
@@ -3655,9 +3670,10 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 				printk("VTCP SAYS: CE MODE to 0\n");
 			}
 		}
+		tp->vtcp_state.delayed_ack_reserved += 1;
 
-	      // always shield the guest from ECN
-	      th->ece = 0;
+		// always shield the guest from ECN
+		th->ece = 0;
 	}
 
 	// We're a wrapper, remember =] ?

@@ -407,8 +407,8 @@ static inline int vtcp_init(struct sock *sk)
 	 */
 	struct tcp_sock *tp = tcp_sk(sk);
 
-	tp->vtcp_state.prior_snd_una = tp->snd_una;
-	tp->vtcp_state.prior_rcv_nxt = tp->rcv_nxt;
+	tp->vtcp_state.prior_snd_una = 0;
+	tp->vtcp_state.prior_rcv_nxt = 0;
 
 	tp->vtcp_state.dctcp_alpha = 1024U; // should be configurable...but isn't. Yet.
 
