@@ -3634,7 +3634,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 			} else 
 			if (tp->vtcp_state.last_window > tp->vtcp_state.target_window) {
 				tp->vtcp_state.last_window  = max (tcp_packets_in_flight(tp), tp->vtcp_state.target_window);
-				th->window = htons(tp->vtcp_state.last_window);
+				th->window = htons(tp->vtcp_state.last_window * 2900 >> 9);
 				if (tp->vtcp_state.last_window <= tp->vtcp_state.target_window) {
 					tp->vtcp_state.ce_state = 1;
 					tcp_ecn_queue_cwr(tp);
@@ -3661,7 +3661,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 			} else {
 				tp->vtcp_state.prior_snd_una += 1;
 			}
-			th->window = htons(tp->vtcp_state.last_window);
+			th->window = htons(tp->vtcp_state.last_window * 2900 >> 9);
 			// hmmm...maybe this does nothing and is incorrect. Can we EVER return to guest-managed
 			// TCP??
 			//if (tp->vtcp_state.last_window >= tp->vtcp_state.acked_bytes_total) {
