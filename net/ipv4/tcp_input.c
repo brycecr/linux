@@ -3634,7 +3634,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 				printk("VTCP SAYS: Saw header without ECN without sending CWR first...\n");
 			} else if (tp->vtcp_state.last_window > tp->vtcp_state.target_window) {
 				tp->vtcp_state.last_window  = max (tcp_packets_in_flight(tp), tp->vtcp_state.target_window);
-				th->window = htons((tp->vtcp_state.last_window * 1500)) << tp->rx_opt.snd_wscale;
+				th->window = htons((tp->vtcp_state.last_window * 1460) >> tp->rx_opt.snd_wscale) ;
 				if (tp->vtcp_state.last_window <= tp->vtcp_state.target_window) {
 					tp->vtcp_state.ce_state = 1;
 					printk("VTCP SAYS: CWR SENT and CE MODE to 1\n");
@@ -3654,13 +3654,13 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 //	}
 //	tp->snd_cwnd = min(tp->snd_cwnd, tp->snd_cwnd_clamp);
 //}
-			if (tp->vtcp_state.prior_snd_una >= tp->vtcp_state.next_seq) {
+			if (tp->vtcp_state.prior_snd_una >= tp->vtcp_state.last_window) {
 				tp->vtcp_state.last_window += 1;
 				tp->vtcp_state.prior_snd_una = 0;
 			} else {
 				tp->vtcp_state.prior_snd_una += 1;
 			}
-			th->window = htons((tp->vtcp_state.last_window * 1500)) << tp->rx_opt.snd_wscale;
+			th->window = htons((tp->vtcp_state.last_window * 1460) >> tp->rx_opt.snd_wscale) ;
 			// hmmm...maybe this does nothing and is incorrect. Can we EVER return to guest-managed
 			// TCP??
 			//if (tp->vtcp_state.last_window >= tp->vtcp_state.acked_bytes_total) {
