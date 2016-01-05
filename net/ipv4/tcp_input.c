@@ -3653,11 +3653,9 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 //	}
 //	tp->snd_cwnd = min(tp->snd_cwnd, tp->snd_cwnd_clamp);
 //}
-			if (tp->vtcp_state.prior_snd_una >= 3) {
+			if (tcp_time_stamp - tp->vtcp_state.prior_snd_una >= usecs_to_jiffies(tp->srtt_us >> 3)) {
 				tp->vtcp_state.last_window += 2;
-				tp->vtcp_state.prior_snd_una = 0;
-			} else {
-				tp->vtcp_state.prior_snd_una += 1;
+				tp->vtcp_state.prior_snd_una = tcp_time_stamp;
 			}
 			th->window = htons(tp->vtcp_state.last_window);
 			// hmmm...maybe this does nothing and is incorrect. Can we EVER return to guest-managed
