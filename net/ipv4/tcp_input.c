@@ -3585,10 +3585,10 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 		 * third: is ecn on for this socket?
 		 * fourth: are we already reducing ecn? (avoid trying to hit a moving target)
 		 */
-		if (th->ece && !th->syn && (tp->ecn_flags & TCP_ECN_OK) && tp->vtcp_state.ce_state != 2
-			&& (!tp->vtcp_state.next_seq || tp->vtcp_state.delayed_ack_reserved > tp->vtcp_state.next_seq) ) {
+		if (th->ece && !th->syn && (tp->ecn_flags & TCP_ECN_OK)
+			&& tcp_time_stamp - tp->vtcp_state.delayed_ack_reserved > usecs_to_jiffies(tp->srtt_us >> 3) ) {
 			printk("VTCP SAYS: HEY %u\n", tp->vtcp_state.ce_state);
-			if (tp->vtcp_state.ce_state == 1) {
+			if (tp->vtcp_state.ce_state != 0) {
 				// in throttled growth state, halve window and start reducing
 				tp->vtcp_state.target_window = max(tp->vtcp_state.last_window/2U, 2U); // halve the current window
 				tp->vtcp_state.ce_state = 2; // decreasing mode
@@ -3605,7 +3605,6 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 			} else {
 				// state transfer: no throttling to reducing window
 				tp->vtcp_state.ce_state = 2;
-				tp->vtcp_state.acked_bytes_total = tp->snd_cwnd;
 				tp->vtcp_state.target_window = max(tp->snd_cwnd/2U, 2U);
 				tp->vtcp_state.last_window = tp->snd_cwnd;
 
@@ -3615,7 +3614,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 				//return __tcp_ack(sk, skb, flag); 
 			}
 			tcp_ecn_queue_cwr(tp);
-			tp->vtcp_state.delayed_ack_reserved = 0;
+			tp->vtcp_state.delayed_ack_reserved = tcp_time_stamp;
 			tp->vtcp_state.next_seq = tcp_packets_in_flight(tp);
 		}
 
@@ -3669,7 +3668,6 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 				printk("VTCP SAYS: CE MODE to 0\n");
 			}
 		}
-		tp->vtcp_state.delayed_ack_reserved += 1;
 
 		// always shield the guest from ECN
 		th->ece = 0;
