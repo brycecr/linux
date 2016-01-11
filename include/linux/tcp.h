@@ -324,6 +324,9 @@ struct tcp_sock {
 		u32 delayed_ack_reserved;
 		u32 target_window;
 		u32 last_window;
+		u32 last_cwnd_red_ts;
+		u32 last_cwnd_inc_ts;
+		u32 pkts_in_flight;
 	} vtcp_state;
 
 /* TCP fastopen related information */

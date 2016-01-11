@@ -3586,7 +3586,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 		 * fourth: are we already reducing ecn? (avoid trying to hit a moving target)
 		 */
 		if (th->ece && !th->syn && (tp->ecn_flags & TCP_ECN_OK)
-			&& tcp_time_stamp - tp->vtcp_state.delayed_ack_reserved > usecs_to_jiffies(tp->srtt_us >> 3) ) {
+			&& tcp_time_stamp - tp->vtcp_state.last_cwnd_red_ts > usecs_to_jiffies(tp->srtt_us >> 3) ) {
 			printk("VTCP SAYS: HEY %u\n", tp->vtcp_state.ce_state);
 			if (tp->vtcp_state.ce_state != 0) {
 				// in throttled growth state, halve window and start reducing
@@ -3614,8 +3614,8 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 				//return __tcp_ack(sk, skb, flag); 
 			}
 			tcp_ecn_queue_cwr(tp);
-			tp->vtcp_state.delayed_ack_reserved = tcp_time_stamp;
-			tp->vtcp_state.next_seq = tcp_packets_in_flight(tp);
+			tp->vtcp_state.last_cwnd_red_ts = tcp_time_stamp;
+			tp->vtcp_state.pkts_in_flight = tcp_packets_in_flight(tp);
 		}
 
 		/* How do we know ECN is "no longer" being requested?
@@ -3653,14 +3653,12 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 //	}
 //	tp->snd_cwnd = min(tp->snd_cwnd, tp->snd_cwnd_clamp);
 //}
-			if (tcp_time_stamp - tp->vtcp_state.prior_snd_una >= usecs_to_jiffies(tp->srtt_us >> 3)) {
+			if (tcp_time_stamp - tp->vtcp_state.last_cwnd_inc_ts >= usecs_to_jiffies(tp->srtt_us >> 3)) {
 				tp->vtcp_state.last_window += 2;
-				tp->vtcp_state.prior_snd_una = tcp_time_stamp;
+				tp->vtcp_state.last_cwnd_inc_ts = tcp_time_stamp;
 			}
 			th->window = htons(tp->vtcp_state.last_window);
 			// hmmm...maybe this does nothing and is incorrect. Can we EVER return to guest-managed
-			// TCP??
-			//if (tp->vtcp_state.last_window >= tp->vtcp_state.acked_bytes_total) {
 			if (tp->vtcp_state.last_window >= tp->snd_cwnd) {
 				//tp->vtcp_state.ce_state = 0;
 				printk("VTCP SAYS: CE MODE to 0\n");
