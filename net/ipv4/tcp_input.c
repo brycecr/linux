@@ -3568,6 +3568,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 
 	struct tcp_sock *tp = tcp_sk(sk);
         struct tcphdr *th = tcp_hdr(skb);
+	u32 acked_bytes = tp->snd_una - tp->vtcp_state.prior_snd_una;
 
 	/* 
 	 * Guard this so that sysctl can act as a proxy for turning on
@@ -3588,7 +3589,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 			printk("VTCP SAYS: HEY %u\n", tp->vtcp_state.ce_state);
 			if (tp->vtcp_state.ce_state != 0) {
 				// in throttled growth state, halve window and start reducing
-				tp->vtcp_state.target_window = max(tp->vtcp_state.last_window/2U, 2U); // halve the current window
+				tp->vtcp_state.target_window = max(tp->vtcp_state.last_window - ((tp->vtcp_state.last_window * tp->vtcp_state.dctcp_alpha) >> 11U), 2U);
 				tp->vtcp_state.ce_state = 2; // decreasing mode
 
 				printk("VTCP SAYS: killed while growing, target %u last %u\n",tp->vtcp_state.target_window,tp->vtcp_state.last_window);
@@ -3596,7 +3597,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 			} else {
 				// state transfer: from no throttling to reducing window
 				tp->vtcp_state.ce_state = 2;
-				tp->vtcp_state.target_window = max(tp->snd_cwnd/2U, 2U);
+				tp->vtcp_state.target_window = max(tp->snd_cwnd - ((tp->snd_cwnd * tp->vtcp_state.dctcp_alpha) >> 11U), 2U);
 				tp->vtcp_state.last_window = tp->snd_cwnd;
 
 				printk("VTCP SAYS: Saw a new ECN setting target window and turing CC on, target %u last %u\n",tp->vtcp_state.target_window,tp->vtcp_state.last_window);
@@ -3605,6 +3606,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 			tcp_ecn_queue_cwr(tp);
 			tp->vtcp_state.last_cwnd_red_ts = tcp_time_stamp;
 			tp->vtcp_state.pkts_in_flight = tcp_packets_in_flight(tp);
+			tp->vtcp_state.next_seq = tp->snd_nxt;
 		}
 
 		/* How do we know ECN is "no longer" being requested?
@@ -3639,6 +3641,42 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 				//tp->vtcp_state.ce_state = 0;
 				printk("VTCP SAYS: Passed congestion window, let things run on\n");
 			}
+		}
+
+
+		/* If ack did not advance snd_una, count dupack as MSS size.
+		 * If ack did update window, do not count it at all.
+		 */
+		if (acked_bytes == 0)
+			acked_bytes = inet_csk(sk)->icsk_ack.rcv_mss;
+		if (acked_bytes) {
+			tp->vtcp_state.acked_bytes_total += acked_bytes;
+			tp->vtcp_state.prior_snd_una = tp->snd_una;
+
+			if (th->ece)
+				tp->vtcp_state.acked_bytes_ecn += acked_bytes;
+		}
+
+		if (!before(tp->snd_una, tp->vtcp_state.next_seq)) {
+
+			/* For avoiding denominator == 1. */
+			if (tp->vtcp_state.acked_bytes_total == 0)
+				tp->vtcp_state.acked_bytes_total = 1;
+
+			/* alpha = (1 - g) * alpha + g * F */
+			tp->vtcp_state.dctcp_alpha = tp->vtcp_state.dctcp_alpha -
+					  (tp->vtcp_state.dctcp_alpha >> 4) +
+					  (tp->vtcp_state.acked_bytes_ecn << (10U - 4)) /
+					  tp->vtcp_state.acked_bytes_total;
+
+			if (tp->vtcp_state.dctcp_alpha > VTCP_DCTCP_MAX_ALPHA)
+				/* Clamp dctcp_alpha to max. */
+				tp->vtcp_state.dctcp_alpha = VTCP_DCTCP_MAX_ALPHA;
+
+			tp->vtcp_state.next_seq = tp->snd_nxt;
+
+			tp->vtcp_state.acked_bytes_ecn = 0;
+			tp->vtcp_state.acked_bytes_total = 0;
 		}
 
 		// always shield the guest from ECN
