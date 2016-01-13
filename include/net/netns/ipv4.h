@@ -75,6 +75,7 @@ struct netns_ipv4 {
 	struct local_ports ip_local_ports;
 
 	int sysctl_tcp_ecn;
+	int sysctl_tcp_vtcp;
 	int sysctl_ip_no_pmtu_disc;
 	int sysctl_ip_fwd_use_pmtu;
 	int sysctl_ip_nonlocal_bind;

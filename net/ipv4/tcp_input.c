@@ -3575,7 +3575,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 	 * should be split into a different sysctl to make the switches
 	 * single purpose and more modular
 	 */
-	if (net->ipv4.sysctl_tcp_ecn == 1) {
+	if (net->ipv4.sysctl_tcp_vtcp == 1 && net->ipv4.sysctl_tcp_ecn == 1) {
 		/* 
 		 * This block initiates throttling.
 		 * first: does current packet have ECE?
