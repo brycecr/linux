@@ -3604,7 +3604,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 
 			tcp_ecn_queue_cwr(tp);
 			tp->vtcp_state.last_cwnd_red_ts = tcp_time_stamp;
-			tp->vtcp_state.pkts_in_flight = tcp_packets_in_flight(tp);
+			tp->vtcp_state.pkts_in_flight = 0;
 		}
 
 		/* How do we know ECN is "no longer" being requested?
@@ -3632,6 +3632,9 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 			if (tcp_time_stamp - tp->vtcp_state.last_cwnd_inc_ts >= usecs_to_jiffies(tp->srtt_us >> 3)) {
 				tp->vtcp_state.last_window += 2;
 				tp->vtcp_state.last_cwnd_inc_ts = tcp_time_stamp;
+				if (!tp->vtcp_state.pkts_in_flight) {
+					tp->vtcp_state.last_window += 1;
+				}
 			}
 			th->window = htons(tp->vtcp_state.last_window);
 			if (tp->vtcp_state.last_window >= tp->snd_cwnd) {
@@ -3639,6 +3642,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 				//tp->vtcp_state.ce_state = 0;
 				printk("VTCP SAYS: Passed congestion window, let things run on\n");
 			}
+			tp->vtcp_state.pkts_in_flight += 1;
 		}
 
 		// always shield the guest from ECN
