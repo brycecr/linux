@@ -426,6 +426,10 @@ static inline int vtcp_init(struct sock *sk)
 	tp->vtcp_state.target_window = 0;
 	tp->vtcp_state.last_window = 0;
 
+	tp->vtcp_state.last_cwnd_red_ts = 0;
+	tp->vtcp_state.last_cwnd_inc_ts = 0;
+	tp->vtcp_state.pkts_in_flight = 0;
+
 	return 0;
 }
 

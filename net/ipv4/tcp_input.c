@@ -3621,7 +3621,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 				printk("VTCP SAYS: Saw header without ECN without sending CWR first...\n");
 			} else if (tp->vtcp_state.last_window > tp->vtcp_state.target_window) {
 				tp->vtcp_state.last_window  = max (tcp_packets_in_flight(tp), tp->vtcp_state.target_window);
-				th->window = htons(tp->vtcp_state.last_window);
+				th->window = htons((uint16_t)tp->vtcp_state.last_window);
 				if (tp->vtcp_state.last_window <= tp->vtcp_state.target_window) {
 					tp->vtcp_state.ce_state = 1;
 					printk("VTCP SAYS: CWR SENT and CE MODE to 1\n");
@@ -3630,13 +3630,16 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 		} else if (tp->vtcp_state.ce_state == 1) {
 			// throttled growth state
 			if (tcp_time_stamp - tp->vtcp_state.last_cwnd_inc_ts >= usecs_to_jiffies(tp->srtt_us >> 3)) {
-				tp->vtcp_state.last_window += 2;
+				tp->vtcp_state.last_window += 3;
 				tp->vtcp_state.last_cwnd_inc_ts = tcp_time_stamp;
-				if (!tp->vtcp_state.pkts_in_flight) {
-					tp->vtcp_state.last_window += 1;
-				}
+			//	if (tp->vtcp_state.pkts_in_flight % 2) {
+			//		tp->vtcp_state.last_window += 1;
+			//		if (tp->vtcp_state.pkts_in_flight % 5) {
+			//			tp->vtcp_state.last_window += 1;
+			//		}
+			//	}
 			}
-			th->window = htons(tp->vtcp_state.last_window);
+			th->window = htons((uint16_t)tp->vtcp_state.last_window);
 			if (tp->vtcp_state.last_window >= tp->snd_cwnd) {
 				// hmm we could return from throttled here
 				//tp->vtcp_state.ce_state = 0;
@@ -3644,6 +3647,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 			}
 			tp->vtcp_state.pkts_in_flight += 1;
 		}
+		printk("The window is %hu", ntohs(th->window));
 
 		// always shield the guest from ECN
 		th->ece = 0;
