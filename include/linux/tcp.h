@@ -322,8 +322,8 @@ struct tcp_sock {
 		u32 next_seq;
 		u32 ce_state;
 		u32 delayed_ack_reserved;
-		u32 target_window;
-		u32 last_window;
+		u16 target_window;
+		u16 last_window;
 		u32 last_cwnd_red_ts;
 		u32 last_cwnd_inc_ts;
 		u32 pkts_in_flight;
