@@ -333,7 +333,7 @@ static void tcp_ecn_send_synack(struct sock *sk, struct sk_buff *skb)
 static void tcp_ecn_send_syn(struct sock *sk, struct sk_buff *skb)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
-	bool use_ecn = sock_net(sk)->ipv4.sysctl_tcp_ecn == 1 ||
+	bool use_ecn = sock_net(sk)->ipv4.sysctl_tcp_ecn == 1 || sock_net(sk)->ipv4.sysctl_tcp_vtcp == 1 ||
 		       tcp_ca_needs_ecn(sk);
 
 	if (!use_ecn) {
