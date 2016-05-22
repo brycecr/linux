@@ -3630,14 +3630,14 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 		} else if (tp->vtcp_state.ce_state == 1) {
 			// throttled growth state
 			if (tcp_time_stamp - tp->vtcp_state.last_cwnd_inc_ts >= usecs_to_jiffies(tp->srtt_us >> 3)) {
-				tp->vtcp_state.last_window += 2;
+				tp->vtcp_state.last_window += 1;
 				tp->vtcp_state.last_cwnd_inc_ts = tcp_time_stamp;
-				if (tp->vtcp_state.pkts_in_flight % 2) {
-					tp->vtcp_state.last_window += 1;
-					if (tp->vtcp_state.pkts_in_flight % 5) {
-						tp->vtcp_state.last_window += 1;
-					}
-				}
+				//if (tp->vtcp_state.pkts_in_flight % 2) {
+				//	tp->vtcp_state.last_window += 1;
+				//	if (tp->vtcp_state.pkts_in_flight % 5) {
+				//		tp->vtcp_state.last_window += 1;
+				//	}
+				//}
 			}
 			th->window = htons(tp->vtcp_state.last_window);
 			if (tp->vtcp_state.last_window >= tp->snd_cwnd) {
