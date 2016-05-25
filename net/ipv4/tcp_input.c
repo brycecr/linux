@@ -3568,6 +3568,8 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 
 	struct tcp_sock *tp = tcp_sk(sk);
         struct tcphdr *th = tcp_hdr(skb);
+	u32 prior_snd_una = tp->snd_una; // first byte we want ack for
+	u32 ack = TCP_SKB_CB(skb)->ack_seq;
 
 	/* 
 	 * Guard this so that sysctl can act as a proxy for turning on
@@ -3630,7 +3632,10 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 		} else if (tp->vtcp_state.ce_state == 1) {
 			// throttled growth state
 			if (tcp_time_stamp - tp->vtcp_state.last_cwnd_inc_ts >= usecs_to_jiffies(tp->srtt_us >> 3)) {
-				tp->vtcp_state.last_window += 1;
+                                printk("VTCP SAYS: Increment by %u", ((ack - prior_snd_una)/1448));
+                                printk("VTCP SAYS: Before was %u", tp->vtcp_state.last_window);
+				tp->vtcp_state.last_window += ((unsigned short)((ack - prior_snd_una)/1448));
+                                printk("VTCP SAYS: After was %u", tp->vtcp_state.last_window);
 				tp->vtcp_state.last_cwnd_inc_ts = tcp_time_stamp;
 				//if (tp->vtcp_state.pkts_in_flight % 2) {
 				//	tp->vtcp_state.last_window += 1;
@@ -3639,14 +3644,15 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 				//	}
 				//}
 			}
-                        unsigned int thing = (tp->vtcp_state.last_window * 1448);
-			th->window = htons(((unsigned short)thing >> 9));
+                        unsigned int thing = (unsigned int)((tp->vtcp_state.last_window * 1448)/3);
+                        unsigned short otherthing = (unsigned short)(thing >> 9);
+			th->window = htons(otherthing);
 			if (tp->vtcp_state.last_window >= tp->snd_cwnd) {
 				// hmm we could return from throttled here
 				//tp->vtcp_state.ce_state = 0;
 				printk("VTCP SAYS: Passed congestion window, let things run on\n");
 			}
-			tp->vtcp_state.pkts_in_flight += 1;
+			//tp->vtcp_state.pkts_in_flight += 1;
 		}
 		printk("VTCP SAYS: The window is %hu and is supposed to be %hu\n", ntohs(th->window), tp->vtcp_state.last_window);
 		printk("VTCP SAYS: State is %u, target is %hu, and pkts in flight is %u\n",
