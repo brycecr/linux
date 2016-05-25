@@ -3639,7 +3639,8 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 				//	}
 				//}
 			}
-			th->window = htons((tp->vtcp_state.last_window * 1448) >> 9);
+                        unsigned int thing = (tp->vtcp_state.last_window * 1448);
+			th->window = htons(((unsigned short)thing >> 9));
 			if (tp->vtcp_state.last_window >= tp->snd_cwnd) {
 				// hmm we could return from throttled here
 				//tp->vtcp_state.ce_state = 0;
