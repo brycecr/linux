@@ -3621,7 +3621,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 			tp->vtcp_state.last_window  = max (tcp_packets_in_flight(tp)*1448-(ack - prior_snd_una), tp->vtcp_state.target_window);
 			unsigned short otherthinga = (unsigned short)((tp->vtcp_state.last_window >> tp->rx_opt.snd_wscale));
 			th->window = htons(otherthinga);
-			if (tp->vtcp_state.last_window <= tp->vtcp_state.target_window && tcp_packets_in_flight(tp)*1448 <= tp->vtcp_state.target_window ) {
+			if (tp->vtcp_state.last_window <= tp->vtcp_state.target_window  ) {
 				tp->vtcp_state.ce_state = 1;
 				printk("VTCP SAYS: CWR SENT and CE MODE to 1\n");
 			}
