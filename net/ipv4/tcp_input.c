@@ -3585,8 +3585,8 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 		 * third: is ecn on for this socket?
 		 * fourth: is time running?
 		 */
-		if (th->ece && !th->syn && (tp->ecn_flags & TCP_ECN_OK)
-			&& tcp_time_stamp - tp->vtcp_state.last_cwnd_red_ts > usecs_to_jiffies(tp->srtt_us >> 3) ) {
+		if (th->ece && !th->syn && (tp->ecn_flags & TCP_ECN_OK)) {
+	//		&& tcp_time_stamp - tp->vtcp_state.last_cwnd_red_ts > usecs_to_jiffies(tp->srtt_us >> 3) ) {
 			printk("VTCP SAYS: HEY %u\n", tp->vtcp_state.ce_state);
 			if (tp->vtcp_state.ce_state != 0) {
 				// in throttled growth state, halve window and start reducing
@@ -3606,7 +3606,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 
 			tp->vtcp_state.last_cwnd_red_ts = tcp_time_stamp;
 			tp->vtcp_state.pkts_in_flight = 0;
-		//	tcp_ecn_queue_cwr(tp);
+			tcp_ecn_queue_cwr(tp);
 		}
 
 		/* How do we know ECN is "no longer" being requested?
@@ -3617,55 +3617,26 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 		 * however.
 		 */
 		if (tp->vtcp_state.ce_state==2) {
-			if (!th->ece) {
-				// Receiver stopped sending us ECE before we sent cwr
-				// AFAIK this isn't really supposed to happen. We ignore it.
-				printk("VTCP SAYS: Saw header without ECN without sending CWR first...\n");
-                                printk("VTCP SAYS: Max of %u and %u", (u16)tcp_packets_in_flight(tp)*1448, tp->vtcp_state.target_window);
-				tp->vtcp_state.last_window  = max (tcp_packets_in_flight(tp)*1448, tp->vtcp_state.target_window);
-				unsigned int thinga = (unsigned int)((tp->vtcp_state.last_window));
-				unsigned short otherthinga = (unsigned short)(thinga >> tp->rx_opt.snd_wscale);
-				th->window = htons(otherthinga);
-				if (tp->vtcp_state.last_window <= tp->vtcp_state.target_window) {
-					tp->vtcp_state.ce_state = 1;
-					tcp_ecn_queue_cwr(tp);
-					printk("VTCP SAYS: CWR SENT and CE MODE to 1\n");
-				}
-			} else {
-                                printk("VTCP SAYS: Max of %u and %u", (u16)tcp_packets_in_flight(tp)*1448, tp->vtcp_state.target_window);
-				tp->vtcp_state.last_window  = max (tcp_packets_in_flight(tp)*1448, tp->vtcp_state.target_window);
-			//	th->window = htons(tp->vtcp_state.last_window);
-				unsigned int thinga = (unsigned int)((tp->vtcp_state.last_window >> tp->rx_opt.snd_wscale));
-				unsigned short otherthinga = (unsigned short)(thinga);
-				th->window = htons(otherthinga);
-				if (tp->vtcp_state.last_window <= tp->vtcp_state.target_window) {
-					tp->vtcp_state.ce_state = 1;
-					tcp_ecn_queue_cwr(tp);
-					printk("VTCP SAYS: CWR SENT and CE MODE to 1\n");
-				}
+			printk("VTCP SAYS: Max of %u and %u", tcp_packets_in_flight(tp)*1448-(ack - prior_snd_una), tp->vtcp_state.target_window);
+			tp->vtcp_state.last_window  = max (tcp_packets_in_flight(tp)*1448-(ack - prior_snd_una), tp->vtcp_state.target_window);
+			unsigned short otherthinga = (unsigned short)((tp->vtcp_state.last_window >> tp->rx_opt.snd_wscale));
+			th->window = htons(otherthinga);
+			if (tp->vtcp_state.last_window <= tp->vtcp_state.target_window && tcp_packets_in_flight(tp)*1448 <= tp->vtcp_state.target_window ) {
+				tp->vtcp_state.ce_state = 1;
+				printk("VTCP SAYS: CWR SENT and CE MODE to 1\n");
 			}
+
 		} else if (tp->vtcp_state.ce_state == 1) {
 			// throttled growth state
 			if (tcp_time_stamp - tp->vtcp_state.last_cwnd_inc_ts >= usecs_to_jiffies(tp->srtt_us >> 3)) {
                                 printk("VTCP SAYS: Increment by %u", ((ack - prior_snd_una)));
-                                printk("VTCP SAYS: Before was %u", tp->vtcp_state.last_window);
 				tp->vtcp_state.last_window += (ack - prior_snd_una);
-                                printk("VTCP SAYS: After was %u", tp->vtcp_state.last_window);
 				tp->vtcp_state.last_cwnd_inc_ts = tcp_time_stamp;
-				//if (tp->vtcp_state.pkts_in_flight % 2) {
-				//	tp->vtcp_state.last_window += 1;
-				//	if (tp->vtcp_state.pkts_in_flight % 5) {
-				//		tp->vtcp_state.last_window += 1;
-				//	}
-				//}
 			}
-			tp->vtcp_state.last_window  = max (tcp_packets_in_flight(tp)*1448, tp->vtcp_state.last_window);
-                        unsigned int thing = (unsigned int)((tp->vtcp_state.last_window));
-                        unsigned short otherthing = (unsigned short)(thing >> tp->rx_opt.snd_wscale);
+                        unsigned short otherthing = (unsigned short)(tp->vtcp_state.last_window >> tp->rx_opt.snd_wscale);
 			th->window = htons(otherthing);
 			if (tp->vtcp_state.last_window >= tp->snd_cwnd*1448) {
 				// hmm we could return from throttled here
-				//tp->vtcp_state.ce_state = 0;
 				printk("VTCP SAYS: Passed congestion window, let things run on\n");
 			}
 			//tp->vtcp_state.pkts_in_flight += 1;
