@@ -3588,14 +3588,14 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 		if (th->ece && !th->syn && (tp->ecn_flags & TCP_ECN_OK)) {
 	//		&& tcp_time_stamp - tp->vtcp_state.last_cwnd_red_ts > usecs_to_jiffies(tp->srtt_us >> 3) ) {
 			printk("VTCP SAYS: HEY %u\n", tp->vtcp_state.ce_state);
-			if (tp->vtcp_state.ce_state != 0) {
+			if (tp->vtcp_state.ce_state == 1) {
 				// in throttled growth state, halve window and start reducing
 				tp->vtcp_state.target_window = max(tp->vtcp_state.last_window/2U, 2896U); // halve the current window
 				tp->vtcp_state.ce_state = 2; // decreasing mode
 
 				printk("VTCP SAYS: killed while growing, target %u last %u\n",tp->vtcp_state.target_window,tp->vtcp_state.last_window);
 
-			} else {
+			} else if (tp->vtcp_state.ce_state==0) {
 				// state transfer: from no throttling to reducing window
 				tp->vtcp_state.ce_state = 2;
 				tp->vtcp_state.target_window = max(tp->snd_cwnd*1448/2U, 2986U);
