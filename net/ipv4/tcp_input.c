@@ -3601,7 +3601,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 			} else if (tp->vtcp_state.ce_state==0) {
 				// state transfer: from no throttling to reducing window
 				tp->vtcp_state.ce_state = 2;
-				tp->vtcp_state.target_window = max(tp->snd_cwnd*1448/2U, 2986U);
+				tp->vtcp_state.target_window = max(tp->snd_cwnd*1448/2U, 2896U);
 				tp->vtcp_state.last_window = tp->snd_cwnd*1448;
 
 				printk("VTCP SAYS: Saw a new ECN setting target window and turing CC on, target %u last %u\n",tp->vtcp_state.target_window,tp->vtcp_state.last_window);
