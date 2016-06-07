@@ -3578,6 +3578,9 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 	 * single purpose and more modular
 	 */
 	if (net->ipv4.sysctl_tcp_vtcp == 1 && net->ipv4.sysctl_tcp_ecn == 1) {
+		if (before(ack, prior_snd_una)) {
+			return __tcp_ack(sk, skb, flag);
+		}
 		/* 
 		 * This block initiates throttling.
 		 * first: does current packet have ECE?
@@ -3585,8 +3588,8 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 		 * third: is ecn on for this socket?
 		 * fourth: is time running?
 		 */
-		if (th->ece && !th->syn && (tp->ecn_flags & TCP_ECN_OK)) {
-	//		&& tcp_time_stamp - tp->vtcp_state.last_cwnd_red_ts > usecs_to_jiffies(tp->srtt_us >> 3) ) {
+		if (th->ece && !th->syn && (tp->ecn_flags & TCP_ECN_OK)
+			&& tcp_time_stamp - tp->vtcp_state.last_cwnd_red_ts > usecs_to_jiffies(tp->srtt_us >> 3) ) {
 			printk("VTCP SAYS: HEY %u\n", tp->vtcp_state.ce_state);
 			if (tp->vtcp_state.ce_state == 1) {
 				// in throttled growth state, halve window and start reducing
@@ -3618,12 +3621,17 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 		 */
 		if (tp->vtcp_state.ce_state==2) {
 			printk("VTCP SAYS: Max of %u and %u", tcp_packets_in_flight(tp)*1448-(ack - prior_snd_una), tp->vtcp_state.target_window);
-			tp->vtcp_state.last_window  = max (tcp_packets_in_flight(tp)*1448-(ack - prior_snd_una), tp->vtcp_state.target_window);
+			if (ack - prior_snd_una > tcp_packets_in_flight(tp)*1448) {
+				tp->vtcp_state.last_window = tp->vtcp_state.target_window;
+			} else {
+				tp->vtcp_state.last_window = max (tcp_packets_in_flight(tp)*1448-(ack - prior_snd_una), tp->vtcp_state.target_window);
+			}
 			unsigned short otherthinga = (unsigned short)((tp->vtcp_state.last_window >> tp->rx_opt.snd_wscale));
 			th->window = htons(otherthinga);
 			if (tp->vtcp_state.last_window <= tp->vtcp_state.target_window  ) {
 				tp->vtcp_state.ce_state = 1;
 				printk("VTCP SAYS: CWR SENT and CE MODE to 1\n");
+				tp->vtcp_state.last_cwnd_red_ts = 0;
 			}
 
 		} else if (tp->vtcp_state.ce_state == 1) {
