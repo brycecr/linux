@@ -3588,10 +3588,11 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 		 * third: is ecn on for this socket?
 		 * fourth: is time running?
 		 */
-		if (th->ece && !th->syn && (tp->ecn_flags & TCP_ECN_OK)
-			&& tcp_time_stamp - tp->vtcp_state.last_cwnd_red_ts > usecs_to_jiffies(tp->srtt_us >> 3) ) {
+                printk("VTCP SAYS: srtt %u\n", tp->srtt_us);
+		if (th->ece && !th->syn && (tp->ecn_flags & TCP_ECN_OK)//){
+			&& tcp_time_stamp - tp->vtcp_state.last_cwnd_red_ts >= usecs_to_jiffies(tp->srtt_us >> 3) ) {
 			printk("VTCP SAYS: HEY %u\n", tp->vtcp_state.ce_state);
-			if (tp->vtcp_state.ce_state == 1) {
+			if (tp->vtcp_state.ce_state != 0) {
 				// in throttled growth state, halve window and start reducing
 				tp->vtcp_state.target_window = max(tp->vtcp_state.last_window/2U, 2896U); // halve the current window
 				tp->vtcp_state.ce_state = 2; // decreasing mode
@@ -3631,16 +3632,16 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 			if (tp->vtcp_state.last_window <= tp->vtcp_state.target_window  ) {
 				tp->vtcp_state.ce_state = 1;
 				printk("VTCP SAYS: CWR SENT and CE MODE to 1\n");
-				tp->vtcp_state.last_cwnd_red_ts = 0;
+		//		tp->vtcp_state.last_cwnd_red_ts = 0;
 			}
 
 		} else if (tp->vtcp_state.ce_state == 1) {
 			// throttled growth state
-			if (tcp_time_stamp - tp->vtcp_state.last_cwnd_inc_ts >= usecs_to_jiffies(tp->srtt_us >> 3)) {
+			//if (tcp_time_stamp - tp->vtcp_state.last_cwnd_inc_ts >= usecs_to_jiffies(tp->srtt_us >> 3)) {
                                 printk("VTCP SAYS: Increment by %u", ((ack - prior_snd_una)));
-				tp->vtcp_state.last_window += (ack - prior_snd_una);
+				tp->vtcp_state.last_window += ((ack - prior_snd_una)*1448) / tp->vtcp_state.last_window;
 				tp->vtcp_state.last_cwnd_inc_ts = tcp_time_stamp;
-			}
+			//}
                         unsigned short otherthing = (unsigned short)(tp->vtcp_state.last_window >> tp->rx_opt.snd_wscale);
 			th->window = htons(otherthing);
 			if (tp->vtcp_state.last_window >= tp->snd_cwnd*1448) {
