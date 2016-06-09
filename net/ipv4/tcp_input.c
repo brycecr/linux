@@ -3637,11 +3637,13 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 
 		} else if (tp->vtcp_state.ce_state == 1) {
 			// throttled growth state
-			//if (tcp_time_stamp - tp->vtcp_state.last_cwnd_inc_ts >= usecs_to_jiffies(tp->srtt_us >> 3)) {
+                        tp->vtcp_state.pkts_in_flight += (ack - prior_snd_una);
+			if (tcp_time_stamp - tp->vtcp_state.last_cwnd_inc_ts >= usecs_to_jiffies(tp->srtt_us >> 3)) {
                                 printk("VTCP SAYS: Increment by %u", ((ack - prior_snd_una)));
-				tp->vtcp_state.last_window += ((ack - prior_snd_una)*1448) / tp->vtcp_state.last_window;
+				tp->vtcp_state.last_window += (tp->vtcp_state.pkts_in_flight*1448) / tp->vtcp_state.last_window;
 				tp->vtcp_state.last_cwnd_inc_ts = tcp_time_stamp;
-			//}
+				tp->vtcp_state.pkts_in_flight = 0;
+			}
                         unsigned short otherthing = (unsigned short)(tp->vtcp_state.last_window >> tp->rx_opt.snd_wscale);
 			th->window = htons(otherthing);
 			if (tp->vtcp_state.last_window >= tp->snd_cwnd*1448) {
