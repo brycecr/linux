@@ -3571,6 +3571,8 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 	u32 prior_snd_una = tp->snd_una; // first byte we want ack for
 	u32 ack = TCP_SKB_CB(skb)->ack_seq;
 
+        unsigned short shiftedwindow;
+
 	/* 
 	 * Guard this so that sysctl can act as a proxy for turning on
 	 * and off the fakEcn behavior. Of course, the "fake" behavior
@@ -3586,26 +3588,20 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 		 * first: does current packet have ECE?
 		 * second: is this not a syn? (ECN on SYN is negotiation, not congestion signal)
 		 * third: is ecn on for this socket?
-		 * fourth: is time running?
+		 * fourth: limit to one ECN reaction per rtt
 		 */
-                printk("VTCP SAYS: srtt %u\n", tp->srtt_us);
 		if (th->ece && !th->syn && (tp->ecn_flags & TCP_ECN_OK)//){
 			&& tcp_time_stamp - tp->vtcp_state.last_cwnd_red_ts >= usecs_to_jiffies(tp->srtt_us >> 3) ) {
-			printk("VTCP SAYS: HEY %u\n", tp->vtcp_state.ce_state);
 			if (tp->vtcp_state.ce_state != 0) {
 				// in throttled growth state, halve window and start reducing
 				tp->vtcp_state.target_window = max(tp->vtcp_state.last_window/2U, 2896U); // halve the current window
 				tp->vtcp_state.ce_state = 2; // decreasing mode
-
-				printk("VTCP SAYS: killed while growing, target %u last %u\n",tp->vtcp_state.target_window,tp->vtcp_state.last_window);
 
 			} else if (tp->vtcp_state.ce_state==0) {
 				// state transfer: from no throttling to reducing window
 				tp->vtcp_state.ce_state = 2;
 				tp->vtcp_state.target_window = max(tp->snd_cwnd*1448/2U, 2896U);
 				tp->vtcp_state.last_window = tp->snd_cwnd*1448;
-
-				printk("VTCP SAYS: Saw a new ECN setting target window and turing CC on, target %u last %u\n",tp->vtcp_state.target_window,tp->vtcp_state.last_window);
 			}
 
 			tp->vtcp_state.last_cwnd_red_ts = tcp_time_stamp;
@@ -3613,48 +3609,30 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 			tcp_ecn_queue_cwr(tp);
 		}
 
-		/* How do we know ECN is "no longer" being requested?
-		 * It looks like actually what's supposed to happen is that ECE keeps getting
-		 * sent until the sender sends a CWR indicating that it has reduced its sending window
-		 * so we wait until we have reached the target window then send (queue) CWR. It may not
-		 * really matter if we do this then or when we start to have the intention to lower the window,
-		 * however.
-		 */
+
 		if (tp->vtcp_state.ce_state==2) {
-			printk("VTCP SAYS: Max of %u and %u", tcp_packets_in_flight(tp)*1448-(ack - prior_snd_una), tp->vtcp_state.target_window);
 			if (ack - prior_snd_una > tcp_packets_in_flight(tp)*1448) {
 				tp->vtcp_state.last_window = tp->vtcp_state.target_window;
 			} else {
 				tp->vtcp_state.last_window = max (tcp_packets_in_flight(tp)*1448-(ack - prior_snd_una), tp->vtcp_state.target_window);
 			}
-			unsigned short otherthinga = (unsigned short)((tp->vtcp_state.last_window >> tp->rx_opt.snd_wscale));
-			th->window = htons(otherthinga);
+			shiftedwindow = (unsigned short)((tp->vtcp_state.last_window >> tp->rx_opt.snd_wscale));
+			th->window = htons(shiftedwindow);
 			if (tp->vtcp_state.last_window <= tp->vtcp_state.target_window  ) {
 				tp->vtcp_state.ce_state = 1;
-				printk("VTCP SAYS: CWR SENT and CE MODE to 1\n");
-		//		tp->vtcp_state.last_cwnd_red_ts = 0;
 			}
 
 		} else if (tp->vtcp_state.ce_state == 1) {
 			// throttled growth state
                         tp->vtcp_state.pkts_in_flight += (ack - prior_snd_una);
 			if (tcp_time_stamp - tp->vtcp_state.last_cwnd_inc_ts >= usecs_to_jiffies(tp->srtt_us >> 3)) {
-                                printk("VTCP SAYS: Increment by %u", ((ack - prior_snd_una)));
 				tp->vtcp_state.last_window += (tp->vtcp_state.pkts_in_flight*1448) / tp->vtcp_state.last_window;
 				tp->vtcp_state.last_cwnd_inc_ts = tcp_time_stamp;
 				tp->vtcp_state.pkts_in_flight = 0;
 			}
-                        unsigned short otherthing = (unsigned short)(tp->vtcp_state.last_window >> tp->rx_opt.snd_wscale);
-			th->window = htons(otherthing);
-			if (tp->vtcp_state.last_window >= tp->snd_cwnd*1448) {
-				// hmm we could return from throttled here
-				printk("VTCP SAYS: Passed congestion window, let things run on\n");
-			}
-			//tp->vtcp_state.pkts_in_flight += 1;
+                        shiftedwindow = (unsigned short)(tp->vtcp_state.last_window >> tp->rx_opt.snd_wscale);
+			th->window = htons(shiftedwindow);
 		}
-		printk("VTCP SAYS: The window is %u and is supposed to be %u\n", ntohs(th->window), tp->vtcp_state.last_window);
-		printk("VTCP SAYS: State is %u, target is %u, and pkts in flight is %u scale is %u\n",
-			tp->vtcp_state.ce_state, tp->vtcp_state.target_window, tcp_packets_in_flight(tp), tp->rx_opt.snd_wscale);
 
 		// always shield the guest from ECN
 		th->ece = 0;
