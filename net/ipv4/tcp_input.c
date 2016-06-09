@@ -2507,6 +2507,24 @@ static void tcp_init_cwnd_reduction(struct sock *sk)
 	tcp_ecn_queue_cwr(tp);
 }
 
+static void tcp_cwnd_down(struct sock *sk, int flag)
+{
+        struct tcp_sock *tp = tcp_sk(sk);
+        int decr = tp->snd_cwnd_cnt + 1;
+
+        if ((flag & (FLAG_ANY_PROGRESS | FLAG_DSACKING_ACK)) ||
+            (tcp_is_reno(tp) && !(flag & FLAG_NOT_DUP))) {
+                tp->snd_cwnd_cnt = decr & 1;
+                decr >>= 1;
+
+                if (decr && tp->snd_cwnd > tcp_cwnd_min(sk))
+                        tp->snd_cwnd -= decr;
+
+                tp->snd_cwnd = min(tp->snd_cwnd, tcp_packets_in_flight(tp) + 1);
+                tp->snd_cwnd_stamp = tcp_time_stamp;
+        }
+}
+
 static void tcp_cwnd_reduction(struct sock *sk, const int prior_unsacked,
 			       int fast_rexmit)
 {
@@ -2538,7 +2556,7 @@ static inline void tcp_end_cwnd_reduction(struct sock *sk)
 	/* Reset cwnd to ssthresh in CWR or Recovery (unless it's undone) */
 	if (inet_csk(sk)->icsk_ca_state == TCP_CA_CWR ||
 	    (tp->undo_marker && tp->snd_ssthresh < TCP_INFINITE_SSTHRESH)) {
-		tp->snd_cwnd = tp->snd_ssthresh;
+		tp->snd_cwnd = min(tp->snd_cwnd, tp->snd_ssthresh);
 		tp->snd_cwnd_stamp = tcp_time_stamp;
 	}
 	tcp_ca_event(sk, CA_EVENT_COMPLETE_CWR);
@@ -2586,7 +2604,8 @@ static void tcp_try_to_open(struct sock *sk, int flag, const int prior_unsacked)
 	if (inet_csk(sk)->icsk_ca_state != TCP_CA_CWR) {
 		tcp_try_keep_open(sk);
 	} else {
-		tcp_cwnd_reduction(sk, prior_unsacked, 0);
+		//tcp_cwnd_reduction(sk, prior_unsacked, 0);
+                tcp_cwnd_down(sk, flag);
 	}
 }
 
@@ -2756,7 +2775,8 @@ static bool tcp_try_undo_partial(struct sock *sk, const int acked,
 		 * mark more packets lost or retransmit more.
 		 */
 		if (tp->retrans_out) {
-			tcp_cwnd_reduction(sk, prior_unsacked, 0);
+			//tcp_cwnd_reduction(sk, prior_unsacked, 0);
+                        tcp_cwnd_down(sk, 0);
 			return true;
 		}
 
@@ -2893,7 +2913,8 @@ static void tcp_fastretrans_alert(struct sock *sk, const int acked,
 
 	if (do_lost)
 		tcp_update_scoreboard(sk, fast_rexmit);
-	tcp_cwnd_reduction(sk, prior_unsacked, fast_rexmit);
+	//tcp_cwnd_reduction(sk, prior_unsacked, fast_rexmit);
+        tcp_cwnd_down(sk, flag);
 	tcp_xmit_retransmit_queue(sk);
 }
 
