@@ -2587,7 +2587,6 @@ static int do_tcp_setsockopt(struct sock *sk, int level,
 		break;
 	}
 
-
 	release_sock(sk);
 	return err;
 }

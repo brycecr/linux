@@ -3397,7 +3397,6 @@ static inline void tcp_in_ack_event(struct sock *sk, u32 flags)
 		icsk->icsk_ca_ops->in_ack_event(sk, flags);
 }
 
-
 /* This routine deals with incoming acks, but not outgoing ones. */
 static int __tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 {
@@ -3566,13 +3565,13 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 	const struct net *net = sock_net(sk);
 
 	struct tcp_sock *tp = tcp_sk(sk);
-        struct tcphdr *th = tcp_hdr(skb);
+	struct tcphdr *th = tcp_hdr(skb);
 	u32 prior_snd_una = tp->snd_una; // first byte we want ack for
 	u32 ack = TCP_SKB_CB(skb)->ack_seq;
 
-        unsigned short shiftedwindow;
+	unsigned short shiftedwindow;
 
-	/* 
+	/*
 	 * Guard this so that sysctl can act as a proxy for turning on
 	 * and off the fakEcn behavior. Of course, the "fake" behavior
 	 * should be split into a different sysctl to make the switches
@@ -3582,7 +3581,8 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 		if (before(ack, prior_snd_una)) {
 			return __tcp_ack(sk, skb, flag);
 		}
-		/* 
+
+		/*
 		 * This block initiates throttling.
 		 * first: does current packet have ECE?
 		 * second: is this not a syn? (ECN on SYN is negotiation, not congestion signal)
@@ -3590,10 +3590,12 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 		 * fourth: limit to one ECN reaction per rtt
 		 */
 		if (th->ece && !th->syn && (tp->ecn_flags & TCP_ECN_OK)
-			&& (!tp->vtcp_state.last_cwnd_red_ts || after(ack, tp->vtcp_state.last_cwnd_red_ts))){ 
+				&& (!tp->vtcp_state.last_cwnd_red_ts
+					|| after(ack, tp->vtcp_state.last_cwnd_red_ts))) { 
+
 			if (tp->vtcp_state.ce_state != 0) {
 				// in throttled growth state, halve window and start reducing
-				tp->vtcp_state.target_window = max(tp->vtcp_state.last_window/2U, 2896U); // halve the current window
+				tp->vtcp_state.target_window = max(tp->vtcp_state.last_window/2U, 2896U);
 				tp->vtcp_state.ce_state = 2; // decreasing mode
 
 			} else if (tp->vtcp_state.ce_state==0) {
@@ -3610,26 +3612,33 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 
 
 		if (tp->vtcp_state.ce_state==2) {
+
 			if (ack - prior_snd_una > tcp_packets_in_flight(tp)*1448) {
 				tp->vtcp_state.last_window = tp->vtcp_state.target_window;
 			} else {
-				tp->vtcp_state.last_window = max (tcp_packets_in_flight(tp)*1448-(ack - prior_snd_una), tp->vtcp_state.target_window);
+				tp->vtcp_state.last_window =
+					max(tcp_packets_in_flight(tp)*1448-(ack-prior_snd_una),
+							tp->vtcp_state.target_window);
 			}
+
 			shiftedwindow = (unsigned short)((tp->vtcp_state.last_window >> tp->rx_opt.snd_wscale));
 			th->window = htons(shiftedwindow);
+
 			if (tp->vtcp_state.last_window <= tp->vtcp_state.target_window  ) {
 				tp->vtcp_state.ce_state = 1;
 			}
 
 		} else if (tp->vtcp_state.ce_state == 1) {
+
 			// throttled growth state
-                        tp->vtcp_state.pkts_in_flight += (ack - prior_snd_una);
+			tp->vtcp_state.pkts_in_flight += (ack - prior_snd_una);
 			if (tcp_time_stamp - tp->vtcp_state.last_cwnd_inc_ts >= usecs_to_jiffies(tp->srtt_us >> 3)) {
 				tp->vtcp_state.last_window += (tp->vtcp_state.pkts_in_flight*1448) / tp->vtcp_state.last_window;
 				tp->vtcp_state.last_cwnd_inc_ts = tcp_time_stamp;
 				tp->vtcp_state.pkts_in_flight = 0;
 			}
-                        shiftedwindow = (unsigned short)(tp->vtcp_state.last_window >> tp->rx_opt.snd_wscale);
+
+			shiftedwindow = (unsigned short)(tp->vtcp_state.last_window >> tp->rx_opt.snd_wscale);
 			th->window = htons(shiftedwindow);
 		}
 
@@ -5972,10 +5981,6 @@ static void tcp_ecn_create_request(struct request_sock *req,
 	ect = !INET_ECN_is_not_ect(TCP_SKB_CB(skb)->ip_dsfield);
 	need_ecn = tcp_ca_needs_ecn(listen_sk);
 	ecn_ok = net->ipv4.sysctl_tcp_ecn || dst_feature(dst, RTAX_FEATURE_ECN);
-
-	printk("VTCP SAYS: ect is %u\n", ect);
-	printk("VTCP SAYS: need_ecn is %u\n", need_ecn);
-	printk("VTCP SAYS: ecn_ok is %u\n", ecn_ok);
 
 	if (!ect && !need_ecn && ecn_ok)
 		inet_rsk(req)->ecn_ok = 1;

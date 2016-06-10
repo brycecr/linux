@@ -309,10 +309,6 @@ struct tcp_sock {
 	struct tcp_md5sig_info	__rcu *md5sig_info;
 #endif
 
-	/* this might be a terrible idea because sock is a basic
-	 * data structure so it is quite likely that assumptions are made
-	 * about its size or what is at the end of it...
-	 * in that likely case, here goes nothing */
 	struct {
 		u32 acked_bytes_ecn;
 		u32 acked_bytes_total;
@@ -403,17 +399,12 @@ static inline int fastopen_init_queue(struct sock *sk, int backlog)
  */
 static inline int vtcp_init(struct sock *sk)
 {
-	/*
-	 * if ((tp->ecn_flags & TCP_ECN_OK) ||
-	 *   (sk->sk_state == TCP_LISTEN ||
-	 *    sk->sk_state == TCP_CLOSE)) {
-	 */
 	struct tcp_sock *tp = tcp_sk(sk);
 
 	tp->vtcp_state.prior_snd_una = 0;
 	tp->vtcp_state.prior_rcv_nxt = 0;
 
-	tp->vtcp_state.dctcp_alpha = 1024U; // should be configurable...but isn't. Yet.
+	tp->vtcp_state.dctcp_alpha = 1024U;
 
 	tp->vtcp_state.delayed_ack_reserved = 0;
 	tp->vtcp_state.ce_state = 0;
