@@ -3561,7 +3561,6 @@ old_ack:
 	return 0;
 }
 
-#define VTCP_DCTCP_MAX_ALPHA 1024U
 static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 {
 	const struct net *net = sock_net(sk);
@@ -3590,8 +3589,8 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 		 * third: is ecn on for this socket?
 		 * fourth: limit to one ECN reaction per rtt
 		 */
-		if (th->ece && !th->syn && (tp->ecn_flags & TCP_ECN_OK)//){
-			&& tcp_time_stamp - tp->vtcp_state.last_cwnd_red_ts >= usecs_to_jiffies(tp->srtt_us >> 3) ) {
+		if (th->ece && !th->syn && (tp->ecn_flags & TCP_ECN_OK)
+			&& (!tp->vtcp_state.last_cwnd_red_ts || after(ack, tp->vtcp_state.last_cwnd_red_ts))){ 
 			if (tp->vtcp_state.ce_state != 0) {
 				// in throttled growth state, halve window and start reducing
 				tp->vtcp_state.target_window = max(tp->vtcp_state.last_window/2U, 2896U); // halve the current window
@@ -3604,7 +3603,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 				tp->vtcp_state.last_window = tp->snd_cwnd*1448;
 			}
 
-			tp->vtcp_state.last_cwnd_red_ts = tcp_time_stamp;
+			tp->vtcp_state.last_cwnd_red_ts = tp->snd_nxt - 1;
 			tp->vtcp_state.pkts_in_flight = 0;
 			tcp_ecn_queue_cwr(tp);
 		}
