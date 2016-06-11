@@ -3573,21 +3573,18 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 
 	/*
 	 * Guard this so that sysctl can act as a proxy for turning on
-	 * and off the fakEcn behavior. Of course, the "fake" behavior
-	 * should be split into a different sysctl to make the switches
-	 * single purpose and more modular
+	 * and off the virtual Ecn behavior. 
 	 */
-	if (net->ipv4.sysctl_tcp_vtcp == 1 && net->ipv4.sysctl_tcp_ecn == 1) {
+	if (net->ipv4.sysctl_tcp_vtcp == 1) {
 		if (before(ack, prior_snd_una)) {
 			return __tcp_ack(sk, skb, flag);
 		}
-
-		/*
+		/* 
 		 * This block initiates throttling.
 		 * first: does current packet have ECE?
 		 * second: is this not a syn? (ECN on SYN is negotiation, not congestion signal)
-		 * third: is ecn on for this socket?
-		 * fourth: limit to one ECN reaction per rtt
+		 * third: is ECN on for this socket? (ECN is set to on during connection establishment if vtcp is on)
+		 * fourth: is time running?
 		 */
 		if (th->ece && !th->syn && (tp->ecn_flags & TCP_ECN_OK)
 				&& (!tp->vtcp_state.last_cwnd_red_ts
