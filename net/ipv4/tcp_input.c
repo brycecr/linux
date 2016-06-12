@@ -3633,12 +3633,13 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 
 			// throttled growth state
 			tp->vtcp_state.pkts_in_flight += (ack - prior_snd_una);
-			if (!tp->vtcp_state.last_cwnd_inc_ts || after(ack, tp->vtcp_state.last_cwnd_inc_ts)) {
-                                unsigned int remainder = ((tp->vtcp_state.pkts_in_flight*1448) % tp->vtcp_state.last_window);
-				tp->vtcp_state.last_window += ((tp->vtcp_state.pkts_in_flight*1448) / tp->vtcp_state.last_window);
-				tp->vtcp_state.last_cwnd_inc_ts = tp->snd_nxt;
-				printk("VTCP: REMAINDER %u\n", remainder);
-				tp->vtcp_state.pkts_in_flight = remainder;
+			if (tp->vtcp_state.pkts_in_flight >= tp->vtcp_state.last_window &&
+				(!tp->vtcp_state.last_cwnd_inc_ts || after(ack, tp->vtcp_state.last_cwnd_inc_ts))) {
+                                //unsigned int remainder = ((tp->vtcp_state.pkts_in_flight*1448) % tp->vtcp_state.last_window);
+                                unsigned int delta = ((tp->vtcp_state.pkts_in_flight * 1448) / tp->vtcp_state.last_window);
+				tp->vtcp_state.last_window += delta;
+                                tp->vtcp_state.last_cwnd_inc_ts = tp->snd_nxt;
+				tp->vtcp_state.pkts_in_flight -= (delta * tp->vtcp_state.last_window) / 1448;
 			}
 
 			shiftedwindow = (unsigned short)(tp->vtcp_state.last_window >> tp->rx_opt.snd_wscale);
