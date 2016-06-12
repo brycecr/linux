@@ -3605,7 +3605,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 				tp->vtcp_state.last_window = tp->snd_cwnd*1448;
 			}
 
-			tp->vtcp_state.last_cwnd_red_ts = tp->snd_nxt - 1;
+			tp->vtcp_state.last_cwnd_red_ts = tp->snd_nxt;
 			tp->vtcp_state.pkts_in_flight = 0;
 			tcp_ecn_queue_cwr(tp);
 		}
@@ -3632,9 +3632,9 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 
 			// throttled growth state
 			tp->vtcp_state.pkts_in_flight += (ack - prior_snd_una);
-			if (tcp_time_stamp - tp->vtcp_state.last_cwnd_inc_ts >= usecs_to_jiffies(tp->srtt_us >> 3)) {
-				tp->vtcp_state.last_window += (tp->vtcp_state.pkts_in_flight*1448) / tp->vtcp_state.last_window;
-				tp->vtcp_state.last_cwnd_inc_ts = tcp_time_stamp;
+			if (!tp->vtcp_state.last_cwnd_inc_ts || after(ack, tp->vtcp_state.last_cwnd_inc_ts)) {
+				tp->vtcp_state.last_window += ((tp->vtcp_state.pkts_in_flight*1448) / tp->vtcp_state.last_window);
+				tp->vtcp_state.last_cwnd_inc_ts = tp->snd_nxt;
 				tp->vtcp_state.pkts_in_flight = 0;
 			}
 
