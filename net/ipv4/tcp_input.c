@@ -3602,7 +3602,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 				tp->vtcp_state.last_window = tp->snd_cwnd*1448;
 			}
 
-			tp->vtcp_state.last_cwnd_red_ts = tp->snd_nxt - 1;
+			tp->vtcp_state.last_cwnd_red_ts = tp->snd_nxt;
 			tp->vtcp_state.pkts_in_flight = 0;
 			tcp_ecn_queue_cwr(tp);
 		}
@@ -3635,7 +3635,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 				tp->vtcp_state.pkts_in_flight = 0;
 			}
 
-			shiftedwindow = (unsigned short)(tp->vtcp_state.last_window >> tp->rx_opt.snd_wscale);
+			shiftedwindow = (unsigned short)(tp->vtcp_state.last_window >> tp->rx_opt.snd_wscale) + 1;
 			th->window = htons(shiftedwindow);
 		}
 
