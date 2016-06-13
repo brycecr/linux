@@ -3591,7 +3591,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 		 */
 		if (th->ece && !th->syn && (tp->ecn_flags & TCP_ECN_OK)
 				&& (!tp->vtcp_state.last_cwnd_red_ts
-					|| after(ack, tp->vtcp_state.last_cwnd_red_ts))) { 
+					|| after(ack, tp->vtcp_state.last_cwnd_red_ts))) {
 
 			if (tp->vtcp_state.ce_state != 0) {
 				// in throttled growth state, halve window and start reducing
@@ -3604,10 +3604,8 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 				tp->vtcp_state.target_window = max(tp->snd_cwnd*1448/2U, 2896U);
 				tp->vtcp_state.last_window = tp->snd_cwnd*1448;
 			}
-
-			tp->vtcp_state.last_cwnd_red_ts = tp->snd_nxt;
+			tp->vtcp_state.last_cwnd_red_ts = tp->snd_nxt - 1;
                         tp->vtcp_state.pkts_in_flight = 0;
-			//tp->vtcp_state.pkts_in_flight -= (((tp->vtcp_state.pkts_in_flight*1448) / tp->vtcp_state.last_window) >> 9)*512;
 			tcp_ecn_queue_cwr(tp);
 		}
 
@@ -3633,16 +3631,22 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 
 			// throttled growth state
 			tp->vtcp_state.pkts_in_flight += (ack - prior_snd_una);
-			if (tp->vtcp_state.pkts_in_flight >= tp->vtcp_state.last_window &&
-				(!tp->vtcp_state.last_cwnd_inc_ts || after(ack, tp->vtcp_state.last_cwnd_inc_ts))) {
-                                //unsigned int remainder = ((tp->vtcp_state.pkts_in_flight*1448) % tp->vtcp_state.last_window);
-                                unsigned int delta = ((tp->vtcp_state.pkts_in_flight * 1448) / tp->vtcp_state.last_window);
-				tp->vtcp_state.last_window += delta;
-                                tp->vtcp_state.last_cwnd_inc_ts = tp->snd_nxt;
-				tp->vtcp_state.pkts_in_flight -= (delta * tp->vtcp_state.last_window) / 1448;
+			if (tp->vtcp_state.pkts_in_flight >= tp->vtcp_state.last_window){// &&
+				//(!tp->vtcp_state.last_cwnd_inc_ts || after(ack, tp->vtcp_state.last_cwnd_inc_ts))) {
+                                unsigned int delta = ((tp->vtcp_state.pkts_in_flight) / tp->vtcp_state.last_window);
+				tp->vtcp_state.pkts_in_flight -= (delta * tp->vtcp_state.last_window);
+				tp->vtcp_state.last_window += delta * 1448;
+                                //tp->vtcp_state.last_cwnd_inc_ts = tp->snd_nxt;
+                                //if((delta * tp->vtcp_state.last_window) / 1448 > tp->vtcp_state.pkts_in_flight) {
+                                //	printk("VTCP: delta: %u pif %u \n", delta * tp->vtcp_state.last_window / 1448, tp->vtcp_state.pkts_in_flight);
+				//}
+				///if((delta * tp->vtcp_state.last_window) / 1448 >= tp->vtcp_state.pkts_in_flight) {
+				///	tp->vtcp_state.pkts_in_flight = 0;
+				///} else {
+				//}
 			}
 
-			shiftedwindow = (unsigned short)(tp->vtcp_state.last_window >> tp->rx_opt.snd_wscale);
+			shiftedwindow = (unsigned short)((tp->vtcp_state.last_window + 512) >> tp->rx_opt.snd_wscale);
 			th->window = htons(shiftedwindow);
 		}
 
