@@ -3618,7 +3618,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 							tp->vtcp_state.target_window);
 			}
 
-			shiftedwindow = (unsigned short)((tp->vtcp_state.last_window >> tp->rx_opt.snd_wscale));
+			shiftedwindow = (unsigned short)((tp->vtcp_state.last_window >> tp->rx_opt.snd_wscale)) + 1;
 			th->window = htons(shiftedwindow);
 
 			if (tp->vtcp_state.last_window <= tp->vtcp_state.target_window  ) {
