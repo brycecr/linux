@@ -3587,7 +3587,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 		 * fourth: is time running?
 		 */
 		if (th->ece && !th->syn && (tp->ecn_flags & TCP_ECN_OK)
-				&& (!tp->vtcp_state.last_cwnd_red_ts
+				&& (!tp->vtcp_state.last_cwnd_red_ts || before(ack, tp->vtcp_state.last_cwnd_red_ts + (tp->vtcp_state.last_window *7) / 8)
 					|| after(ack, tp->vtcp_state.last_cwnd_red_ts))) { 
 
 			if (tp->vtcp_state.ce_state != 0) {
