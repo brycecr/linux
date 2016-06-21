@@ -3629,7 +3629,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 
 			// throttled growth state
 			tp->vtcp_state.pkts_in_flight += (ack - prior_snd_una);
-			if (tcp_time_stamp - tp->vtcp_state.last_cwnd_inc_ts >= usecs_to_jiffies(tp->srtt_us >> 3)) {
+			if (tp->vtcp_state.pkts_in_flight >= tp->vtcp_state.last_window) {
 				tp->vtcp_state.last_window += (tp->vtcp_state.pkts_in_flight*1448) / tp->vtcp_state.last_window;
 				tp->vtcp_state.last_cwnd_inc_ts = tcp_time_stamp;
 				tp->vtcp_state.pkts_in_flight = 0;
