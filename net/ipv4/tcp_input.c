@@ -3608,17 +3608,22 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 		}
 
 
-		if (tp->vtcp_state.ce_state==2) {
+		if (tp->vtcp_state.ce_state==2) { // in decreasing mode
 
 			if (ack - prior_snd_una > tcp_packets_in_flight(tp)*1448) {
 				tp->vtcp_state.last_window = tp->vtcp_state.target_window;
 			} else {
 				tp->vtcp_state.last_window =
-					max(tcp_packets_in_flight(tp)*1448-(ack-prior_snd_una),
+					/* max(tcp_packets_in_flight(tp)*1448-(ack-prior_snd_una), */
+					max(tp->snd_nxt-prior_snd_una+1500*(((tp->vtcp_state.last_window - tp->vtcp_state.target_window)/1448) % 2),
 							tp->vtcp_state.target_window);
 			}
+			
+			printk("VTCP says: bytes in flight = %d, vcc last window = %d, diff = %d, target window = %d\n", tp->snd_nxt-prior_snd_una, tp->vtcp_state.last_window, tp->vtcp_state.last_window-(tp->snd_nxt-prior_snd_una), tp->vtcp_state.target_window);
 
-			shiftedwindow = (unsigned short)((tp->vtcp_state.last_window >> tp->rx_opt.snd_wscale)) + 1;
+			// Aran's change: make sure CWR is realeased early - add one mss
+
+			shiftedwindow = (unsigned short)((tp->vtcp_state.last_window >> tp->rx_opt.snd_wscale) + 1);
 			th->window = htons(shiftedwindow);
 
 			if (tp->vtcp_state.last_window <= tp->vtcp_state.target_window  ) {
