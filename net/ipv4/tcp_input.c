@@ -3615,7 +3615,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 			} else {
 				tp->vtcp_state.last_window =
 					/* max(tcp_packets_in_flight(tp)*1448-(ack-prior_snd_una), */
-					max(tp->snd_nxt-prior_snd_una+1500*(((tp->vtcp_state.last_window - tp->vtcp_state.target_window)/1448) % 2),
+					max(tp->snd_nxt-ack+1448*(((tp->vtcp_state.last_window - tp->vtcp_state.target_window)/1448) % 2),
 							tp->vtcp_state.target_window);
 			}
 			
