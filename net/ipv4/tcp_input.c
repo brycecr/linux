@@ -3292,6 +3292,8 @@ static int tcp_ack_update_window(struct sock *sk, const struct sk_buff *skb, u32
 
 	if (likely(!tcp_hdr(skb)->syn))
 		nwin <<= tp->rx_opt.snd_wscale;
+	
+	printk("VTCP says: snd_wnd before = %u, rwin = %u\n", tp->snd_wnd, nwin);
 
 	if (tcp_may_update_window(tp, ack, ack_seq, nwin)) {
 		flag |= FLAG_WIN_UPDATE;
@@ -3314,6 +3316,8 @@ static int tcp_ack_update_window(struct sock *sk, const struct sk_buff *skb, u32
 	}
 
 	tp->snd_una = ack;
+
+	printk("VTCP says: snd_wnd after = %u\n", tp->snd_wnd);
 
 	return flag;
 }
@@ -3568,6 +3572,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 	struct tcphdr *th = tcp_hdr(skb);
 	u32 prior_snd_una = tp->snd_una; // first byte we want ack for
 	u32 ack = TCP_SKB_CB(skb)->ack_seq;
+	unsigned int cur_mss = tcp_current_mss(sk);
 
 	unsigned short shiftedwindow;
 
@@ -3592,34 +3597,46 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 
 			if (tp->vtcp_state.ce_state != 0) {
 				// in throttled growth state, halve window and start reducing
-				tp->vtcp_state.target_window = max(tp->vtcp_state.last_window/2U, 2896U);
+				tp->vtcp_state.target_window = max(tp->vtcp_state.last_window/2U, 2*cur_mss);
+				tp->vtcp_state.last_prr_acked = ack - 2 * cur_mss ;
 				tp->vtcp_state.ce_state = 2; // decreasing mode
+				printk("VTCP says: ENTERTING WR PHASE. target = %u, last_wnd = %u\n", tp->vtcp_state.target_window, tp->vtcp_state.last_window);
 
 			} else if (tp->vtcp_state.ce_state==0) {
 				// state transfer: from no throttling to reducing window
 				tp->vtcp_state.ce_state = 2;
-				tp->vtcp_state.target_window = max(tp->snd_cwnd*1448/2U, 2896U);
-				tp->vtcp_state.last_window = tp->snd_cwnd*1448;
+				tp->vtcp_state.target_window = max(tp->snd_cwnd*cur_mss/2U, 2*cur_mss);
+				tp->vtcp_state.last_window = tp->snd_cwnd*cur_mss;
 			}
 
 			tp->vtcp_state.last_cwnd_red_ts = tp->snd_nxt;
-			tp->vtcp_state.pkts_in_flight = 0;
+			tp->vtcp_state.bytes_in_flight = 0;
 			tcp_ecn_queue_cwr(tp);
 		}
 
 
 		if (tp->vtcp_state.ce_state==2) { // in decreasing mode
 
-			if (ack - prior_snd_una > tcp_packets_in_flight(tp)*1448) {
+			if (ack - prior_snd_una > tcp_packets_in_flight(tp)*cur_mss) {
 				tp->vtcp_state.last_window = tp->vtcp_state.target_window;
 			} else {
+				unsigned segments_acked = (ack - tp->vtcp_state.last_prr_acked)/cur_mss;
+				unsigned snd_cnt = segments_acked / 2;
+				tp->vtcp_state.last_prr_acked += cur_mss * snd_cnt * 2;
 				tp->vtcp_state.last_window =
-					/* max(tcp_packets_in_flight(tp)*1448-(ack-prior_snd_una), */
-					max(tp->snd_nxt-ack+1448*(((tp->vtcp_state.last_window - tp->vtcp_state.target_window)/1448) % 2),
-							tp->vtcp_state.target_window);
+				  /* max(tp->vtcp_state.target_window, tcp_packets_in_flight(tp)*cur_mss-(ack-prior_snd_una), */
+				  max(tp->vtcp_state.target_window, tp->snd_nxt-ack + cur_mss * snd_cnt);
+			printk("VTCP says: ack = %d segs, bytes in flight = %d, vcc new window = %d, diff = %d, target window = %d, segments_acked = %d, snd_cnt = %d, last_prr_acked = %u segs\n", 
+				ack/cur_mss, 
+				tp->snd_nxt-ack,
+				tp->vtcp_state.last_window,
+				tp->vtcp_state.last_window-(tp->snd_nxt-ack),
+				tp->vtcp_state.target_window,
+				segments_acked,
+				snd_cnt,
+				tp->vtcp_state.last_prr_acked/cur_mss);
 			}
 			
-			printk("VTCP says: bytes in flight = %d, vcc last window = %d, diff = %d, target window = %d\n", tp->snd_nxt-prior_snd_una, tp->vtcp_state.last_window, tp->vtcp_state.last_window-(tp->snd_nxt-prior_snd_una), tp->vtcp_state.target_window);
 
 			// Aran's change: make sure CWR is realeased early - add one mss
 
@@ -3633,11 +3650,11 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 		} else if (tp->vtcp_state.ce_state == 1) {
 
 			// throttled growth state
-			tp->vtcp_state.pkts_in_flight += (ack - prior_snd_una);
-			if (tp->vtcp_state.pkts_in_flight >= tp->vtcp_state.last_window) {
-				tp->vtcp_state.last_window += (tp->vtcp_state.pkts_in_flight*1448) / tp->vtcp_state.last_window;
+			tp->vtcp_state.bytes_in_flight += (ack - prior_snd_una);
+			if (tp->vtcp_state.bytes_in_flight >= tp->vtcp_state.last_window) {
+				tp->vtcp_state.last_window += (tp->vtcp_state.bytes_in_flight*cur_mss) / tp->vtcp_state.last_window;
 				tp->vtcp_state.last_cwnd_inc_ts = tcp_time_stamp;
-				tp->vtcp_state.pkts_in_flight = 0;
+				tp->vtcp_state.bytes_in_flight = 0;
 			}
 
 			shiftedwindow = (unsigned short)(tp->vtcp_state.last_window >> tp->rx_opt.snd_wscale) + 1;

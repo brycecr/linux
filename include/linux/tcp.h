@@ -322,7 +322,8 @@ struct tcp_sock {
 		u32 last_window;
 		u32 last_cwnd_red_ts;
 		u32 last_cwnd_inc_ts;
-		u32 pkts_in_flight;
+		u32 bytes_in_flight;
+		u32 last_prr_acked;
 	} vtcp_state;
 
 /* TCP fastopen related information */
@@ -419,8 +420,9 @@ static inline int vtcp_init(struct sock *sk)
 
 	tp->vtcp_state.last_cwnd_red_ts = 0;
 	tp->vtcp_state.last_cwnd_inc_ts = 0;
-	tp->vtcp_state.pkts_in_flight = 0;
+	tp->vtcp_state.bytes_in_flight = 0;
 
+	tp->vtcp_state.last_prr_acked = 0;
 	return 0;
 }
 

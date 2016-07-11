@@ -1638,8 +1638,11 @@ static inline bool tcp_nagle_test(const struct tcp_sock *tp, const struct sk_buf
 	if (tcp_urg_mode(tp) || (TCP_SKB_CB(skb)->tcp_flags & TCPHDR_FIN))
 		return true;
 
+	printk("VTCP says: len = %u, cur_mss = %u\n", skb->len, cur_mss);
 	if (!tcp_nagle_check(skb->len < cur_mss, tp, nonagle))
 		return true;
+
+	printk("VTCP says: Nagle test failed\n");
 
 	return false;
 }
@@ -1651,9 +1654,11 @@ static bool tcp_snd_wnd_test(const struct tcp_sock *tp,
 {
 	u32 end_seq = TCP_SKB_CB(skb)->end_seq;
 
+	printk("VTCP says: wnd test - end_seq before = %u\n", end_seq);
 	if (skb->len > cur_mss)
 		end_seq = TCP_SKB_CB(skb)->seq + cur_mss;
 
+	printk("VTCP says: end_seq after =  %u, tcp_wnd_end = %u\n", end_seq, tcp_wnd_end(tp));
 	return !after(end_seq, tcp_wnd_end(tp));
 }
 
@@ -1780,6 +1785,7 @@ static bool tcp_tso_should_defer(struct sock *sk, struct sk_buff *skb,
 	cong_win = (tp->snd_cwnd - in_flight) * tp->mss_cache;
 
 	limit = min(send_win, cong_win);
+	printk("VTCP says: tcp_tso_should_defer says send_win = %u, cong_win = %u, limit = %u\n", send_win, cong_win, limit);
 
 	/* If a full-sized TSO skb can be sent, do it. */
 	if (limit >= max_segs * tp->mss_cache)
@@ -1791,12 +1797,14 @@ static bool tcp_tso_should_defer(struct sock *sk, struct sk_buff *skb,
 
 	win_divisor = ACCESS_ONCE(sysctl_tcp_tso_win_divisor);
 	if (win_divisor) {
+		printk("VTCP says: Inside win_divisor block\n");
 		u32 chunk = min(tp->snd_wnd, tp->snd_cwnd * tp->mss_cache);
 
 		/* If at least some fraction of a window is available,
 		 * just use it.
 		 */
 		chunk /= win_divisor;
+		printk("VTCP says: chunk = %u\n", chunk);
 		if (limit >= chunk)
 			goto send_now;
 	} else {
@@ -1805,6 +1813,7 @@ static bool tcp_tso_should_defer(struct sock *sk, struct sk_buff *skb,
 		 * frame, so if we have space for more than 3 frames
 		 * then send now.
 		 */
+		printk("VTCP says: In non-win_divisor block. compare limit to  = %u\n", tcp_max_tso_deferred_mss(tp) * tp->mss_cache);
 		if (limit > tcp_max_tso_deferred_mss(tp) * tp->mss_cache)
 			goto send_now;
 	}
@@ -2015,9 +2024,12 @@ static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
 			else
 				break;
 		}
+		printk("VTCP says: cwnd_test passed\n");
 
 		if (unlikely(!tcp_snd_wnd_test(tp, skb, mss_now)))
 			break;
+		printk("VTCP says: snd_wnd_test passed\n");
+		printk("VTCP says: tso_segs = %u, max_segs = %u\n", tso_segs, max_segs);
 
 		if (tso_segs == 1 || !max_segs) {
 			if (unlikely(!tcp_nagle_test(tp, skb, mss_now,
@@ -2025,11 +2037,14 @@ static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
 						      nonagle : TCP_NAGLE_PUSH))))
 				break;
 		} else {
+			printk("VTCP says: push_one = %u, is_cwnd_limited = %u\n", push_one, is_cwnd_limited);
 			if (!push_one &&
 			    tcp_tso_should_defer(sk, skb, &is_cwnd_limited,
 						 max_segs))
 				break;
 		}
+		printk("VTCP says: nagle/tso test passed\n");
+		
 
 		limit = mss_now;
 		if (tso_segs > 1 && max_segs && !tcp_urg_mode(tp))
@@ -2069,6 +2084,7 @@ static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
 
 		if (unlikely(tcp_transmit_skb(sk, skb, 1, gfp)))
 			break;
+		printk("VTCP says: new packet sent\n");
 
 repair:
 		/* Advance the send_head.  This one is sent out.
