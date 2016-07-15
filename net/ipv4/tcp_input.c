@@ -2505,8 +2505,8 @@ static void tcp_init_cwnd_reduction(struct sock *sk)
 	tp->prr_out = 0;
 	tp->snd_ssthresh = inet_csk(sk)->icsk_ca_ops->ssthresh(sk);
 	tcp_ecn_queue_cwr(tp);
+	/* Added to disable PRR */
 	tp->snd_cwnd = tp->snd_ssthresh;
-	printk(" PRR: Entered CWND reduciton phase, prior_cwnd = %u, cwnd = %u, ssthresh = %u\n", tp->prior_cwnd, tp->snd_cwnd, tp->snd_ssthresh);
 }
 
 static void tcp_cwnd_reduction(struct sock *sk, const int prior_unsacked,
@@ -2529,9 +2529,8 @@ static void tcp_cwnd_reduction(struct sock *sk, const int prior_unsacked,
 				     newly_acked_sacked) + 1);
 	}
 
-	printk(" PRR: sndcnt = %u, fast_rexmit = %u, cwnd = %u, ssthresh = %u\n", sndcnt, fast_rexmit, tp->snd_cwnd, tp->snd_ssthresh);
 	sndcnt = max(sndcnt, (fast_rexmit ? 1 : 0));
-	/*tp->snd_cwnd = tcp_packets_in_flight(tp) + sndcnt; */
+	/*tp->snd_cwnd = tcp_packets_in_flight(tp) + sndcnt; // prevent PRR from sending anything during window reduction */
 }
 
 static inline void tcp_end_cwnd_reduction(struct sock *sk)
@@ -2539,14 +2538,12 @@ static inline void tcp_end_cwnd_reduction(struct sock *sk)
 	struct tcp_sock *tp = tcp_sk(sk);
 
 	/* Reset cwnd to ssthresh in CWR or Recovery (unless it's undone) */
-	printk(" PRR: ==> tcp_enc_cwnd_reduction. ca_state = %u. Compare to TCP_CA_CWR = %u\n", inet_csk(sk)->icsk_ca_state, TCP_CA_CWR);
 	if (inet_csk(sk)->icsk_ca_state == TCP_CA_CWR ||
 	    (tp->undo_marker && tp->snd_ssthresh < TCP_INFINITE_SSTHRESH)) {
 		tp->snd_cwnd = tp->snd_ssthresh;
 		tp->snd_cwnd_stamp = tcp_time_stamp;
 	}
 	tcp_ca_event(sk, CA_EVENT_COMPLETE_CWR);
-	printk(" PRR: CWND reduciton phase ended. cwnd = %u, ssthresh = %u\n", tp->snd_cwnd, tp->snd_ssthresh);
 }
 
 /* Enter CWR state. Disable cwnd undo since congestion is proven with ECN */
@@ -2554,13 +2551,11 @@ void tcp_enter_cwr(struct sock *sk)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
 
-	printk(" PRR: ==> tcp_enter_cwr\n");
 	tp->prior_ssthresh = 0;
 	if (inet_csk(sk)->icsk_ca_state < TCP_CA_CWR) {
 		tp->undo_marker = 0;
 		tcp_init_cwnd_reduction(sk);
 		tcp_set_ca_state(sk, TCP_CA_CWR);
-		printk(" PRR: ca_state = TCP_CA_CWR = %u\n", TCP_CA_CWR);
 	}
 }
 
@@ -2593,7 +2588,6 @@ static void tcp_try_to_open(struct sock *sk, int flag, const int prior_unsacked)
 	if (inet_csk(sk)->icsk_ca_state != TCP_CA_CWR) {
 		tcp_try_keep_open(sk);
 	} else {
-		printk(" PRR: tcp_cwnd_reduction called from tcp_try_to_open.\n");
 		tcp_cwnd_reduction(sk, prior_unsacked, 0);
 	}
 }
@@ -2764,7 +2758,6 @@ static bool tcp_try_undo_partial(struct sock *sk, const int acked,
 		 * mark more packets lost or retransmit more.
 		 */
 		if (tp->retrans_out) {
-			printk(" PRR: tcp_cwnd_reduction called from tcp_try_undo_partial.\n");
 			tcp_cwnd_reduction(sk, prior_unsacked, 0);
 			return true;
 		}
@@ -2902,7 +2895,6 @@ static void tcp_fastretrans_alert(struct sock *sk, const int acked,
 
 	if (do_lost)
 		tcp_update_scoreboard(sk, fast_rexmit);
-	printk(" PRR: tcp_cwnd_reduction called from tcp_fastretrans_alert.\n");
 	tcp_cwnd_reduction(sk, prior_unsacked, fast_rexmit);
 	tcp_xmit_retransmit_queue(sk);
 }
