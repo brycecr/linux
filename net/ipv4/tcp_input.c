@@ -3293,8 +3293,6 @@ static int tcp_ack_update_window(struct sock *sk, const struct sk_buff *skb, u32
 	if (likely(!tcp_hdr(skb)->syn))
 		nwin <<= tp->rx_opt.snd_wscale;
 	
-	/*printk("VTCP says: snd_wnd before = %u, rwin = %u\n", tp->snd_wnd, nwin);*/
-
 	if (tcp_may_update_window(tp, ack, ack_seq, nwin)) {
 		flag |= FLAG_WIN_UPDATE;
 		tcp_update_wl(tp, ack_seq);
@@ -3316,8 +3314,6 @@ static int tcp_ack_update_window(struct sock *sk, const struct sk_buff *skb, u32
 	}
 
 	tp->snd_una = ack;
-
-	/*printk("VTCP says: snd_wnd after = %u\n", tp->snd_wnd);*/
 
 	return flag;
 }
@@ -3600,7 +3596,6 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 				tp->vtcp_state.target_window = max(tp->vtcp_state.last_window/2U, 2*cur_mss);
 				tp->vtcp_state.last_prr_acked = ack - 2 * cur_mss ;
 				tp->vtcp_state.ce_state = 2; // decreasing mode
-				/*printk("VTCP says: ENTERTING WR PHASE. target = %u, last_wnd = %u\n", tp->vtcp_state.target_window, tp->vtcp_state.last_window);*/
 
 			} else if (tp->vtcp_state.ce_state==0) {
 				// state transfer: from no throttling to reducing window
@@ -3626,15 +3621,6 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 				tp->vtcp_state.last_window =
 				  /* max(tp->vtcp_state.target_window, tcp_packets_in_flight(tp)*cur_mss-(ack-prior_snd_una), */
 				  max(tp->vtcp_state.target_window, tp->snd_nxt-ack + cur_mss * snd_cnt);
-/*			printk("VTCP says: ack = %d segs, bytes in flight = %d, vcc new window = %d, diff = %d, target window = %d, segments_acked = %d, snd_cnt = %d, last_prr_acked = %u segs\n", 
-				ack/cur_mss, 
-				tp->snd_nxt-ack,
-				tp->vtcp_state.last_window,
-				tp->vtcp_state.last_window-(tp->snd_nxt-ack),
-				tp->vtcp_state.target_window,
-				segments_acked,
-				snd_cnt,
-				tp->vtcp_state.last_prr_acked/cur_mss); */
 			}
 			
 
